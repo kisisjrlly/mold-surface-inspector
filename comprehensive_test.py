@@ -204,20 +204,27 @@ def test_file_structure():
         'data_manager.py',
         'requirements.txt',
         'README.md',
-        'QUICK_START.md',
-        'DEV_GUIDE.md',
-        'API_REFERENCE.md',
-        'FUNCTIONS.md',
-        'ARCHITECTURE.md',
-        'TROUBLESHOOTING.md',
-        'CHANGELOG.md',
-        'DOC_INDEX.md',
         'run.sh',
         'install.sh'
     ]
     
+    # docs目录下的文档文件
+    doc_files = [
+        'docs/README.md',
+        'docs/QUICK_START.md',
+        'docs/DEV_GUIDE.md',
+        'docs/API_REFERENCE.md',
+        'docs/FUNCTIONS.md',
+        'docs/ARCHITECTURE.md',
+        'docs/TROUBLESHOOTING.md',
+        'docs/CHANGELOG.md',
+        'docs/DOC_INDEX.md'
+    ]
+    
+    all_required_files = required_files + doc_files
+    
     missing_files = []
-    for file in required_files:
+    for file in all_required_files:
         if not (project_root / file).exists():
             missing_files.append(file)
     
@@ -225,7 +232,7 @@ def test_file_structure():
         print(f"  ❌ 缺少文件: {', '.join(missing_files)}")
         return False
     else:
-        print(f"  ✅ 所有必需文件存在 ({len(required_files)} 个)")
+        print(f"  ✅ 所有必需文件存在 ({len(all_required_files)} 个)")
         return True
 
 def test_documentation():
@@ -250,7 +257,7 @@ def test_documentation():
             print("  ✅ README.md 内容完整")
         
         # 检查文档索引
-        doc_index_path = project_root / 'DOC_INDEX.md'
+        doc_index_path = project_root / 'docs' / 'DOC_INDEX.md'
         with open(doc_index_path, 'r', encoding='utf-8') as f:
             doc_index_content = f.read()
         

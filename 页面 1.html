@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模具曲面精度分析系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2563eb',
+                        secondary: '#64748b'
+                    },
+                    borderRadius: {
+                        'none': '0px',
+                        'sm': '2px',
+                        DEFAULT: '4px',
+                        'md': '8px',
+                        'lg': '12px',
+                        'xl': '16px',
+                        '2xl': '20px',
+                        '3xl': '24px',
+                        'full': '9999px',
+                        'button': '4px'
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+</head>
+<body class="min-h-[1024px] bg-gray-50">
+    <div class="w-[1440px] mx-auto">
+        <header class="h-12 bg-white border-b flex items-center px-4">
+            <div class="flex items-center space-x-4">
+                <button class="text-gray-600 hover:text-primary !rounded-button px-3 py-1">文件(F)</button>
+                <button class="text-gray-600 hover:text-primary !rounded-button px-3 py-1">视图(V)</button>
+                <button class="text-gray-600 hover:text-primary !rounded-button px-3 py-1">工具(T)</button>
+                <button class="text-gray-600 hover:text-primary !rounded-button px-3 py-1">帮助(H)</button>
+            </div>
+        </header>
+
+        <div class="h-12 bg-white border-b flex items-center px-4 space-x-4">
+            <button class="bg-primary text-white px-4 py-2 !rounded-button whitespace-nowrap">
+                <i class="fas fa-folder-open mr-2"></i>加载模型
+            </button>
+            <button class="bg-secondary text-white px-4 py-2 !rounded-button whitespace-nowrap">
+                <i class="fas fa-sync-alt mr-2"></i>重置视图
+            </button>
+            <button class="bg-green-600 text-white px-4 py-2 !rounded-button whitespace-nowrap">
+                <i class="fas fa-play mr-2"></i>开始测量
+            </button>
+            <button class="bg-yellow-500 text-white px-4 py-2 !rounded-button whitespace-nowrap">
+                <i class="fas fa-pause mr-2"></i>暂停
+            </button>
+            <button class="bg-red-500 text-white px-4 py-2 !rounded-button whitespace-nowrap">
+                <i class="fas fa-stop mr-2"></i>停止
+            </button>
+        </div>
+
+        <div class="flex">
+            <div class="w-[320px] bg-white p-4 border-r">
+                <div class="mb-6">
+                    <h3 class="text-lg font-medium mb-4">理论模型信息</h3>
+                    <div class="space-y-2">
+                        <div class="flex items-center">
+                            <span class="text-gray-500 w-24">模型名称:</span>
+                            <span>a_mold_rev2.step</span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="text-gray-500 w-24">旋转轴范围:</span>
+                            <span>10.0° - 170.0°</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="text-lg font-medium mb-4">测量参数设置</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-1">X轴测量范围</label>
+                            <div class="flex items-center space-x-2">
+                                <input type="text" value="-5.0" class="w-20 px-2 py-1 border !rounded-button text-sm" />
+                                <span>至</span>
+                                <input type="text" value="500.0" class="w-20 px-2 py-1 border !rounded-button text-sm" />
+                                <span>mm</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-1">X轴步长</label>
+                            <div class="flex items-center space-x-2">
+                                <input type="text" value="10.0" class="w-20 px-2 py-1 border !rounded-button text-sm" />
+                                <span>mm</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-500 mb-1">旋转轴步长</label>
+                            <div class="flex items-center space-x-2">
+                                <input type="text" value="1.5" class="w-20 px-2 py-1 border !rounded-button text-sm" />
+                                <span>°</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="text-lg font-medium mb-4">实时状态监控</h3>
+                    <div class="space-y-2">
+                        <div class="flex items-center">
+                            <span class="text-gray-500 w-24">当前X位置:</span>
+                            <span>150.0 mm</span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="text-gray-500 w-24">当前旋转角:</span>
+                            <span>45.0°</span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="text-gray-500 w-24">有效角度:</span>
+                            <span>[15°-75°], [105°-165°]</span>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="text-gray-500 w-24">系统状态:</span>
+                            <span class="flex items-center">
+                                <span class="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
+                                测量中...
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="flex-1 bg-white p-4">
+                <div class="w-full h-[600px] bg-gray-100 !rounded-lg overflow-hidden">
+                    <img src="https://ai-public.mastergo.com/ai/img_res/b4b2acf1af1a7f739abbcf0e90ca0a98.jpg" class="w-full h-full object-cover" />
+                </div>
+            </div>
+
+            <div class="w-[320px] bg-white p-4 border-l">
+                <div class="mb-6">
+                    <h3 class="text-lg font-medium mb-4">颜色图例</h3>
+                    <div class="space-y-2">
+                        <div class="flex items-center">
+                            <div class="w-4 h-4 bg-red-500 !rounded-button mr-2"></div>
+                            <span>+0.5mm (正向超差)</span>
+                        </div>
+                        <div class="flex items-center">
+                            <div class="w-4 h-4 bg-orange-500 !rounded-button mr-2"></div>
+                            <span>+0.25mm</span>
+                        </div>
+                        <div class="flex items-center">
+                            <div class="w-4 h-4 bg-green-500 !rounded-button mr-2"></div>
+                            <span>0.0mm (合格范围)</span>
+                        </div>
+                        <div class="flex items-center">
+                            <div class="w-4 h-4 bg-blue-500 !rounded-button mr-2"></div>
+                            <span>-0.25mm</span>
+                        </div>
+                        <div class="flex items-center">
+                            <div class="w-4 h-4 bg-blue-700 !rounded-button mr-2"></div>
+                            <span>-0.5mm (负向超差)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="text-lg font-medium mb-4">总体误差统计</h3>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-500">最大误差:</span>
+                            <span>+0.152 mm</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-500">最小误差:</span>
+                            <span>-0.201 mm</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-500">平均误差:</span>
+                            <span>+0.034 mm</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-500">标准差:</span>
+                            <span>0.088 mm</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-lg font-medium mb-4">误差分布直方图</h3>
+                    <div id="errorChart" class="w-full h-[200px]"></div>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white p-4">
+            <div class="mb-4 flex items-center justify-between">
+                <h3 class="text-lg font-medium">实时数据表格</h3>
+                <span class="text-gray-500">测量中... (已完成 103 / 约 2500 点)</span>
+            </div>
+            <table class="w-full">
+                <thead>
+                    <tr class="bg-gray-50">
+                        <th class="px-4 py-2 text-left">序号</th>
+                        <th class="px-4 py-2 text-left">X坐标(mm)</th>
+                        <th class="px-4 py-2 text-left">角度(°)</th>
+                        <th class="px-4 py-2 text-left">测量值(mm)</th>
+                        <th class="px-4 py-2 text-left">理论值(mm)</th>
+                        <th class="px-4 py-2 text-left">误差(mm)</th>
+                        <th class="px-4 py-2 text-left">状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="px-4 py-2">101</td>
+                        <td class="px-4 py-2">150.0</td>
+                        <td class="px-4 py-2">45.0</td>
+                        <td class="px-4 py-2">50.120</td>
+                        <td class="px-4 py-2">50.100</td>
+                        <td class="px-4 py-2 text-green-600">+0.020</td>
+                        <td class="px-4 py-2">
+                            <span class="px-2 py-1 bg-green-100 text-green-800 !rounded-button text-sm">合格</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-2">102</td>
+                        <td class="px-4 py-2">150.0</td>
+                        <td class="px-4 py-2">46.5</td>
+                        <td class="px-4 py-2">50.135</td>
+                        <td class="px-4 py-2">50.110</td>
+                        <td class="px-4 py-2 text-green-600">+0.025</td>
+                        <td class="px-4 py-2">
+                            <span class="px-2 py-1 bg-green-100 text-green-800 !rounded-button text-sm">合格</span>
+                        </td>
+                    </tr>
+                    <tr class="bg-yellow-50">
+                        <td class="px-4 py-2">103</td>
+                        <td class="px-4 py-2">150.0</td>
+                        <td class="px-4 py-2">48.0</td>
+                        <td class="px-4 py-2">50.280</td>
+                        <td class="px-4 py-2">50.125</td>
+                        <td class="px-4 py-2 text-red-600">+0.155</td>
+                        <td class="px-4 py-2">
+                            <span class="px-2 py-1 bg-red-100 text-red-800 !rounded-button text-sm">超差!</span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const errorChart = echarts.init(document.getElementById('errorChart'));
+        const option = {
+            animation: false,
+            grid: {
+                left: '10%',
+                right: '10%',
+                bottom: '15%'
+            },
+            xAxis: {
+                type: 'category',
+                data: ['-0.2', '-0.1', '0.0', '+0.1', '+0.2']
+            },
+            yAxis: {
+                type: 'value'
+            },
+            series: [{
+                data: [20, 40, 110, 50, 20],
+                type: 'bar',
+                itemStyle: {
+                    color: '#2563eb'
+                }
+            }]
+        };
+        errorChart.setOption(option);
+    </script>
+</body>
+</html>

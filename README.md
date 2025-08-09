@@ -69,7 +69,8 @@ mold-surface-inspector/
     ├── FUNCTIONS.md       # 功能详细说明
     ├── TROUBLESHOOTING.md # 故障排除指南
     ├── DOC_INDEX.md       # 文档导航索引
-    └── CHANGELOG.md       # 更新日志
+    ├── CHANGELOG.md       # 更新日志
+    └── USER_COMMANDS.md   # 用户命令记录
 ```
 
 ## 📚 文档导航
@@ -90,6 +91,9 @@ mold-surface-inspector/
 - **[🛠️ 故障排除指南](docs/TROUBLESHOOTING.md)** - 常见问题和解决方案
 - **[📋 更新日志](docs/CHANGELOG.md)** - 版本更新记录
 - **[📖 文档导航](docs/DOC_INDEX.md)** - 完整文档索引
+
+### 📋 项目跟踪
+- **[📝 用户命令记录](docs/USER_COMMANDS.md)** - 项目发展历程和需求跟踪
 
 ### 🎯 按需阅读建议
 

@@ -9,6 +9,7 @@
 import sys
 import random
 import math
+import numpy as np
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QHBoxLayout, QGridLayout, QFormLayout, QLabel, 
                                QPushButton, QLineEdit, QTableWidget, QTableWidgetItem,
@@ -83,7 +84,7 @@ class MainWindow(QMainWindow):
         toolbar.setFloatable(False)
         
         # 加载模型按钮
-        self.load_model_btn = QPushButton("📁 加载模型")
+        self.load_model_btn = QPushButton("📁 加载理论模型")
         self.load_model_btn.setObjectName("primaryButton")
         toolbar.addWidget(self.load_model_btn)
         
@@ -118,39 +119,45 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # 主布局 - 水平分割
-        main_layout = QHBoxLayout(central_widget)
+        # 主布局 - 仅三栏水平布局（中间面板包含3D与表格）
+        main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
-        # 创建分割器
-        splitter = QSplitter(Qt.Horizontal)
-        main_layout.addWidget(splitter)
+        # 三栏水平布局
+        top_splitter = QSplitter(Qt.Horizontal)
         
         # 左侧面板 - 测量设置与控制
         left_panel = self.create_left_panel()
-        splitter.addWidget(left_panel)
+        top_splitter.addWidget(left_panel)
         
-        # 中心区域 - 可视化与实时数据
+        # 中心区域 - 3D可视化 + 表格
         center_panel = self.create_center_panel()
-        splitter.addWidget(center_panel)
+        top_splitter.addWidget(center_panel)
         
         # 右侧面板 - 统计分析与图例
         right_panel = self.create_right_panel()
-        splitter.addWidget(right_panel)
+        top_splitter.addWidget(right_panel)
         
-        # 设置分割器比例
-        splitter.setSizes([AppConfig.LEFT_PANEL_WIDTH, 800, AppConfig.RIGHT_PANEL_WIDTH])
+        # 设置三栏的宽度比例 [320, flexible, 320]
+        top_splitter.setSizes([320, 800, 320])
+        top_splitter.setStretchFactor(0, 0)  # 左侧固定宽度
+        top_splitter.setStretchFactor(1, 1)  # 中心可伸缩
+        top_splitter.setStretchFactor(2, 0)  # 右侧固定宽度
+        
+        # 添加三栏到主布局
+        main_layout.addWidget(top_splitter)
+        # 中心面板内部已包含实时数据表格
         
     def create_left_panel(self):
         """创建左侧面板 - 测量设置与控制"""
         panel = QFrame()
         panel.setObjectName("leftPanel")
-        panel.setFixedWidth(AppConfig.LEFT_PANEL_WIDTH)
+        panel.setFixedWidth(320)  # 固定宽度320px，与UI.png一致
         panel.setFrameStyle(QFrame.StyledPanel)
         
         layout = QVBoxLayout(panel)
-        layout.setSpacing(20)
+        layout.setSpacing(16)
         layout.setContentsMargins(16, 16, 16, 16)
         
         # 理论模型信息
@@ -180,8 +187,8 @@ class MainWindow(QMainWindow):
         title.setObjectName("groupTitle")
         layout.addWidget(title)
         
-        # 加载模型按钮
-        self.load_cad_btn = QPushButton("加载CAD模型...")
+        # 加载理论模型按钮
+        self.load_cad_btn = QPushButton("加载理论点云...")
         self.load_cad_btn.setObjectName("primaryButton")
         layout.addWidget(self.load_cad_btn)
         
@@ -193,8 +200,8 @@ class MainWindow(QMainWindow):
         
         # 模型名称
         name_layout = QHBoxLayout()
-        name_layout.addWidget(QLabel("模型名称:"))
-        self.model_name_label = QLabel("a_mold_rev2.step")
+        name_layout.addWidget(QLabel("点云文件:"))
+        self.model_name_label = QLabel("未加载")
         self.model_name_label.setObjectName("infoValue")
         name_layout.addWidget(self.model_name_label)
         name_layout.addStretch()
@@ -342,7 +349,7 @@ class MainWindow(QMainWindow):
         return group_widget
         
     def create_center_panel(self):
-        """创建中心面板 - 可视化与实时数据"""
+        """创建中心面板 - 3D可视化 + 实时数据表格"""
         panel = QFrame()
         panel.setObjectName("centerPanel")
         
@@ -350,28 +357,42 @@ class MainWindow(QMainWindow):
         layout.setSpacing(16)
         layout.setContentsMargins(16, 16, 16, 16)
         
-        # 3D可视化窗口（占位符）
-        visualization_widget = QWidget()
-        visualization_widget.setObjectName("visualizationPlaceholder")
-        visualization_widget.setMinimumHeight(400)
-        visualization_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # 3D可视化窗口
+        self.visualization_widget = QWidget()
+        self.visualization_widget.setObjectName("visualizationPlaceholder")
+        self.visualization_widget.setMinimumHeight(400)
+        self.visualization_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
-        # 添加占位文字
-        viz_layout = QVBoxLayout(visualization_widget)
-        viz_label = QLabel("3D 可视化窗口")
+        # 保存layout引用以便后续更新
+        self.viz_layout = QVBoxLayout(self.visualization_widget)
+        self.viz_layout.setContentsMargins(0, 0, 0, 0)
+        self.viz_layout.setSpacing(0)
+        viz_label = QLabel("3D Visualization Window\n点击'加载理论模型'加载点云数据")
         viz_label.setAlignment(Qt.AlignCenter)
         viz_label.setObjectName("placeholderText")
-        viz_layout.addWidget(viz_label)
+        self.viz_layout.addWidget(viz_label)
         
-        layout.addWidget(visualization_widget)
+        layout.addWidget(self.visualization_widget)
         
-        # 实时数据表格
-        self.create_data_table(layout)
+        # 添加实时数据表格（位于中心面板下方）
+        table_widget = self.create_data_table_widget()
+        layout.addWidget(table_widget)
+        
+        # 设置中间布局伸缩比例：3D区域更大，表格较小
+        layout.setStretch(0, 3)
+        layout.setStretch(1, 1)
         
         return panel
+    
+    def create_data_table_widget(self):
+        """创建实时数据表格独立组件"""
+        table_widget = QWidget()
+        table_widget.setObjectName("dataTableWidget")
         
-    def create_data_table(self, parent_layout):
-        """创建实时数据表格"""
+        layout = QVBoxLayout(table_widget)
+        layout.setSpacing(8)
+        layout.setContentsMargins(16, 16, 16, 16)
+        
         # 表格标题和状态
         table_header = QHBoxLayout()
         table_title = QLabel("实时数据表格")
@@ -383,7 +404,7 @@ class MainWindow(QMainWindow):
         table_header.addWidget(self.table_status_label)
         table_header.addStretch()
         
-        parent_layout.addLayout(table_header)
+        layout.addLayout(table_header)
         
         # 创建表格
         self.data_table = QTableWidget()
@@ -396,7 +417,8 @@ class MainWindow(QMainWindow):
         # 设置表格属性
         self.data_table.setAlternatingRowColors(True)
         self.data_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.data_table.setMinimumHeight(300)
+        self.data_table.setMinimumHeight(250)
+        self.data_table.setMaximumHeight(300)
         
         # 设置表头
         header = self.data_table.horizontalHeader()
@@ -406,7 +428,11 @@ class MainWindow(QMainWindow):
         # 添加示例数据
         self.populate_sample_data()
         
-        parent_layout.addWidget(self.data_table)
+        layout.addWidget(self.data_table)
+        
+        return table_widget
+        # 删除原有的create_data_table方法调用，因为现在已经移到独立组件中
+        pass
         
     def populate_sample_data(self):
         """填充示例数据"""
@@ -432,11 +458,11 @@ class MainWindow(QMainWindow):
         """创建右侧面板 - 统计分析与图例"""
         panel = QFrame()
         panel.setObjectName("rightPanel")
-        panel.setFixedWidth(AppConfig.RIGHT_PANEL_WIDTH)
+        panel.setFixedWidth(320)  # 固定宽度320px，与UI.png一致
         panel.setFrameStyle(QFrame.StyledPanel)
         
         layout = QVBoxLayout(panel)
-        layout.setSpacing(20)
+        layout.setSpacing(16)
         layout.setContentsMargins(16, 16, 16, 16)
         
         # 颜色图例
@@ -588,42 +614,208 @@ class MainWindow(QMainWindow):
     # ==========================================
     
     def load_model(self):
-        """加载CAD模型占位符函数"""
-        print("=== 加载模型功能 ===")
+        """加载理论点云数据文件"""
+        print("=== 加载理论点云数据 ===")
         
         # 打开文件选择对话框
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "选择CAD模型文件",
+            "选择理论点云数据文件",
             "",
-            "CAD文件 (*.step *.stp *.iges *.igs *.stl);;所有文件 (*.*)"
+            "点云文件 (*.csv *.txt);;CSV文件 (*.csv);;文本文件 (*.txt);;所有文件 (*.*)"
         )
         
         if file_path:
-            print(f"选择的文件路径: {file_path}")
+            print(f"选择的点云文件路径: {file_path}")
             
-            # 提取文件名
-            import os
-            file_name = os.path.basename(file_path)
+            try:
+                # 加载点云数据
+                point_cloud_data = self.load_point_cloud_file(file_path)
+                
+                if point_cloud_data is not None:
+                    # 更新UI显示
+                    import os
+                    file_name = os.path.basename(file_path)
+                    self.model_name_label.setText(file_name)
+                    
+                    # 更新点云数据计数
+                    point_count = len(point_cloud_data)
+                    self.rotation_range_label.setText(f"数据点: {point_count} 个")
+                    
+                    # 在3D可视化区域显示点云
+                    self.display_point_cloud_in_3d(point_cloud_data)
+                    
+                    print(f"成功加载点云数据: {point_count} 个数据点")
+                    
+                    # 显示成功消息
+                    QMessageBox.information(
+                        self, 
+                        "加载成功", 
+                        f"成功加载理论点云数据!\n\n文件: {file_name}\n数据点: {point_count} 个"
+                    )
+                else:
+                    # 显示错误消息
+                    QMessageBox.warning(
+                        self,
+                        "加载失败",
+                        f"无法加载点云文件: {file_path}\n\n请检查文件格式是否正确。"
+                    )
             
-            # 更新模型信息
-            self.model_name_label.setText(file_name)
-            
-            # 模拟更新旋转轴范围
-            simulated_ranges = [
-                "5.0° - 175.0°",
-                "0.0° - 180.0°", 
-                "10.0° - 170.0°",
-                "15.0° - 165.0°"
-            ]
-            import random
-            new_range = random.choice(simulated_ranges)
-            self.rotation_range_label.setText(new_range)
-            
-            # 显示成功消息
-            QMessageBox.information(self, "模型加载", f"已成功加载模型: {file_name}")
+            except Exception as e:
+                print(f"加载点云文件时出错: {e}")
+                QMessageBox.critical(
+                    self,
+                    "加载错误", 
+                    f"加载点云文件时发生错误:\n\n{str(e)}"
+                )
         else:
             print("用户取消了文件选择")
+            
+    def load_point_cloud_file(self, file_path):
+        """加载点云数据文件"""
+        import pandas as pd
+        import numpy as np
+        
+        try:
+            if file_path.endswith('.csv'):
+                # 尝试加载CSV文件
+                df = pd.read_csv(file_path)
+                
+                # 检查是否有必要的列
+                required_cols = ['x_mm', 'y_mm', 'z_mm']
+                if all(col in df.columns for col in required_cols):
+                    points = df[required_cols].values
+                    return points
+                else:
+                    # 尝试其他可能的列名格式
+                    alt_cols = ['x', 'y', 'z']
+                    if all(col in df.columns for col in alt_cols):
+                        points = df[alt_cols].values
+                        return points
+                    else:
+                        print(f"CSV文件缺少必要的列。找到的列: {list(df.columns)}")
+                        print(f"需要的列: {required_cols} 或 {alt_cols}")
+                        return None
+                    
+            elif file_path.endswith('.txt'):
+                # 尝试加载文本文件
+                with open(file_path, 'r') as f:
+                    lines = f.readlines()
+                
+                points = []
+                for line in lines:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        parts = line.split()
+                        if len(parts) >= 3:  # x, y, z
+                            try:
+                                x, y, z = float(parts[0]), float(parts[1]), float(parts[2])
+                                points.append([x, y, z])
+                            except ValueError:
+                                continue
+                
+                return np.array(points) if points else None
+            
+            else:
+                print(f"不支持的文件格式: {file_path}")
+                return None
+                
+        except Exception as e:
+            print(f"读取点云文件时出错: {e}")
+            return None
+    
+    def display_point_cloud_in_3d(self, point_cloud_data):
+        """在3D可视化区域显示点云数据"""
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+            from matplotlib.figure import Figure
+            
+            # 创建matplotlib图形（由Qt画布自适应大小）
+            fig = Figure()
+            canvas = FigureCanvas(fig)
+            canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            canvas.setMinimumSize(1, 1)
+            
+            # 创建3D子图
+            ax = fig.add_subplot(111, projection='3d')
+            
+            # 从点云数据中提取坐标
+            if len(point_cloud_data) > 5000:
+                # 如果点太多，进行采样以提高性能
+                indices = np.random.choice(len(point_cloud_data), 5000, replace=False)
+                sampled_data = point_cloud_data[indices]
+            else:
+                sampled_data = point_cloud_data
+            
+            x_coords = sampled_data[:, 0]
+            y_coords = sampled_data[:, 1] 
+            z_coords = sampled_data[:, 2]
+            
+            # 绘制3D散点图
+            scatter = ax.scatter(x_coords, y_coords, zs=z_coords,
+                                 c=z_coords, cmap='viridis', s=1, alpha=0.7)
+            
+            # 设置标签和标题
+            ax.set_xlabel('X (mm)')
+            ax.set_ylabel('Y (mm)')
+            set_zlabel = getattr(ax, 'set_zlabel', None)
+            if callable(set_zlabel):
+                set_zlabel('Z (mm)')
+            ax.set_title('Theoretical Point Cloud', pad=6)
+            
+            # 让坐标轴尽量占满画布区域
+            try:
+                ax.set_position((0.02, 0.02, 0.85, 0.96))  # (left, bottom, width, height)
+            except Exception:
+                pass
+            
+            # 使用嵌入式颜色条，避免占用主轴外部空间
+            try:
+                from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+                cax = inset_axes(ax, width="3%", height="70%", loc="center right", borderpad=1.2)
+                fig.colorbar(scatter, cax=cax)
+            except Exception:
+                # 回退方案：仍然添加颜色条，但尽量不留太多空白
+                fig.colorbar(scatter, ax=ax, shrink=0.6)
+            
+            # 更新3D可视化区域
+            self.update_visualization_widget(canvas)
+            
+            print(f"3D点云可视化已更新，显示 {len(sampled_data)} 个点")
+            
+        except ImportError as e:
+            print(f"缺少matplotlib库: {e}")
+            QMessageBox.warning(
+                self, "可视化错误", 
+                "需要安装matplotlib库才能显示3D可视化\n\n请运行: pip install matplotlib"
+            )
+        except Exception as e:
+            print(f"3D可视化时出错: {e}")
+            QMessageBox.warning(self, "可视化错误", f"显示3D点云时出错:\n\n{str(e)}")
+    
+    def update_visualization_widget(self, canvas):
+        """更新3D可视化窗口部件"""
+        try:
+            # 清除现有内容
+            for i in reversed(range(self.viz_layout.count())):
+                child = self.viz_layout.itemAt(i).widget()
+                if child:
+                    child.setParent(None)
+            
+            # 添加新的matplotlib画布
+            self.viz_layout.addWidget(canvas)
+            canvas.updateGeometry()
+            
+            print("3D可视化区域已更新为matplotlib画布")
+            
+        except Exception as e:
+            print(f"更新3D可视化区域时出错: {e}")
+            # 如果更新失败，显示错误信息
+            error_label = QLabel(f"3D Visualization Error:\n{str(e)}")
+            error_label.setAlignment(Qt.AlignCenter)
+            error_label.setObjectName("errorText")
+            self.viz_layout.addWidget(error_label)
             
     def reset_view(self):
         """重置视图占位符函数"""

@@ -4,7 +4,7 @@
 
 ## �️ 界面预览
 
-![系统界面](figure/UI.png)
+![系统界面](./figures/UI_with_display_pointcloud.png)
 
 *系统主界面：三栏布局设计，左侧为参数设置，中央为3D可视化，右侧为数据统计*
 

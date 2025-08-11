@@ -2,9 +2,171 @@
 
 ## 📖 概述
 
-本文档详细描述了模具曲面精度分析系统中所有类、方法和函数的API接口。
+本文档详细描述了模具曲面精度分析系统中所有类、方法和函数的API接口。该系统采用多线程架构，通过硬件模拟器和误差分析工作线程实现实时数据处理。
 
-## 📁 模块结构
+## 📁 核心模块架构
+
+```
+mold-surface-inspector/
+├── main_window.py          # 主窗口 - UI控制层
+├── hardware_simulator.py  # 硬件模拟器 - 数据生成层  
+├── analysis_worker.py      # 误差分析器 - 数据处理层
+├── config.py              # 配置管理 - 参数层
+├── styles.py              # 样式管理 - 表示层
+└── data_manager.py        # 数据管理 - 数据层
+```
+
+## 🔧 核心类详细说明
+
+### hardware_simulator.py
+
+#### HardwareSimulator 类
+
+**继承**: `QThread`
+
+**描述**: 硬件测量设备模拟器，在独立线程中生成带有误差的测量数据。
+
+##### 信号定义
+
+```python
+# 自定义信号
+measurement_point = Signal(int, float, float, float)  # 序号, X, 角度, 测量半径
+measurement_finished = Signal()  # 测量完成信号
+measurement_error = Signal(str)  # 错误信号  
+progress_updated = Signal(int, int)  # 进度更新 (当前点, 总点数)
+```
+
+##### 构造方法
+
+```python
+def __init__(self, theoretical_data, measurement_params, output_file_path="live_measurement.csv")
+```
+
+**参数**:
+- `theoretical_data: pd.DataFrame` - 理论点云数据，包含列 (x_mm, y_mm, z_mm)
+- `measurement_params: dict` - 测量参数字典
+  ```python
+  {
+      'x_min': float,           # X坐标最小值
+      'x_max': float,           # X坐标最大值  
+      'x_step': float,          # X坐标步长
+      'rot_step': float,        # 旋转角度步长
+      'measurement_delay': float # 测量间隔时间(秒)
+  }
+  ```
+- `output_file_path: str` - 测量数据输出CSV文件路径
+
+##### 核心方法
+
+```python
+def run(self) -> None
+```
+**功能**: 线程主执行方法，执行完整测量流程
+**流程**:
+1. 过滤理论数据得到测量点
+2. 按序进行测量模拟
+3. 生成带误差的测量数据
+4. 发射信号通知主线程
+
+```python  
+def filter_measurement_points(self) -> pd.DataFrame
+```
+**功能**: 根据测量参数过滤理论数据
+**返回**: `pd.DataFrame` - 筛选后的测量点
+**算法**: 循环旋转角度模式，模拟真实测量轨迹
+
+```python
+def simulate_measurement_error(self, ideal_radius: float, x_pos: float, angle_deg: float) -> float
+```  
+**功能**: 为理想半径值添加模拟误差
+**参数**:
+- `ideal_radius: float` - 理论半径值
+- `x_pos: float` - X坐标位置
+- `angle_deg: float` - 角度位置
+
+**返回**: `float` - 带误差的测量半径值
+**误差模型**: 组合系统误差、随机噪声和位置相关误差
+
+### analysis_worker.py
+
+#### AnalysisWorker 类
+
+**继承**: `QThread`
+
+**描述**: 误差分析工作线程，实时监控测量数据文件并执行误差计算。
+
+##### 信号定义
+
+```python
+# 自定义信号
+analysis_result = Signal(dict)      # 分析结果信号
+statistics_updated = Signal(dict)   # 统计数据更新信号
+error_data_updated = Signal(list)   # 误差数据更新信号（用于直方图）
+analysis_finished = Signal()       # 分析完成信号
+analysis_error = Signal(str)       # 错误信号
+```
+
+##### 构造方法
+
+```python
+def __init__(self, theoretical_data, measurement_file_path="live_measurement.csv")
+```
+
+**参数**:
+- `theoretical_data: pd.DataFrame` - 理论点云数据
+- `measurement_file_path: str` - 测量数据文件路径
+
+##### 核心方法
+
+```python
+def run(self) -> None  
+```
+**功能**: 线程主执行方法，实时监控文件变化
+**流程**:
+1. 创建理论数据查找索引
+2. 监控测量文件大小变化
+3. 处理新增的测量数据行
+4. 计算误差并更新统计
+
+```python
+def create_theoretical_lookup(self) -> None
+```
+**功能**: 创建理论数据的快速查找索引
+**索引结构**: `{(x_mm, angle_key): theoretical_point}` 
+**优化**: 使用角度取整提高查找效率
+
+```python  
+def process_measurement_line(self, line: str) -> dict
+```
+**功能**: 处理单行测量数据并计算误差
+**参数**: `line: str` - CSV格式的测量数据行
+**返回**: `dict` - 完整的分析结果字典
+**内容**:
+```python
+{
+    'sequence': int,              # 测量序号
+    'x_pos': float,              # X坐标
+    'angle_deg': float,          # 角度
+    'measured_radius': float,    # 测量半径
+    'theoretical_radius': float, # 理论半径
+    'error_analysis': dict,      # 误差分析详情
+    'measured_point': tuple      # 测量点坐标(x,y,z)
+}
+```
+
+```python
+def convert_to_cartesian(self, x: float, angle_deg: float, radius: float) -> tuple
+```
+**功能**: 柱坐标转换为笛卡尔坐标
+**参数**:
+- `x: float` - X轴坐标（柱坐标系）
+- `angle_deg: float` - 角度（度）
+- `radius: float` - 半径
+
+**返回**: `tuple` - (x, y, z) 笛卡尔坐标
+**公式**: 
+- y = radius * cos(angle)
+- z = radius * sin(angle)
 
 ### main_window.py
 
@@ -12,93 +174,33 @@
 
 **继承**: `QMainWindow`
 
-**描述**: 应用程序的主窗口类，负责整个界面的构建和交互逻辑。
+**描述**: 应用程序主窗口，集成硬件模拟器和误差分析器的UI控制层。
 
-##### 构造方法
+##### 线程管理方法
 
 ```python
-def __init__(self)
+def start_measurement(self) -> None
 ```
-**功能**: 初始化主窗口实例
-- 设置状态变量
-- 初始化定时器
-- 调用UI构建方法
-- 设置样式和信号连接
-
-**状态变量**:
-- `is_measuring: bool` - 测量状态标记
-- `simulation_timer: QTimer` - 模拟数据定时器
-- `current_sequence: int` - 当前测量序号
-- `measurement_count: int` - 已测量点数
-- `total_measurement_count: int` - 预计总测量点数
-- `current_x: float` - 当前X坐标
-- `current_angle: float` - 当前旋转角度
-- `errors_list: List[float]` - 误差数据列表
-
-##### UI构建方法
+**功能**: 启动测量流程
+**流程**:
+1. 验证理论数据已加载
+2. 读取测量参数
+3. 创建HardwareSimulator和AnalysisWorker实例
+4. 连接信号槽
+5. 启动线程
+6. 更新UI状态
 
 ```python
-def init_ui(self) -> None
+def cleanup_threads(self) -> None  
 ```
-**功能**: 初始化用户界面
-- 设置窗口属性（标题、尺寸）
-- 创建菜单栏、工具栏、中央部件
+**功能**: 清理线程资源
+**操作**:
+- 停止硬件模拟器线程
+- 停止分析工作线程  
+- 等待线程结束
+- 释放资源
 
-```python
-def create_menu_bar(self) -> None
-```
-**功能**: 创建应用程序菜单栏
-**菜单项**: 文件(F), 视图(V), 工具(T), 帮助(H)
-
-```python
-def create_toolbar(self) -> None
-```
-**功能**: 创建工具栏
-**按钮组件**:
-- `load_model_btn: QPushButton` - 加载模型按钮
-- `reset_view_btn: QPushButton` - 重置视图按钮
-- `start_measure_btn: QPushButton` - 开始测量按钮
-- `pause_btn: QPushButton` - 暂停按钮
-- `stop_btn: QPushButton` - 停止按钮
-
-```python
-def create_central_widget(self) -> None
-```
-**功能**: 创建中央窗口部件
-**布局**: 三栏水平布局（左侧面板 | 中心区域 | 右侧面板）
-
-```python
-def create_left_panel(self) -> QFrame
-```
-**功能**: 创建左侧面板
-**返回**: QFrame 对象
-**包含组件**:
-- 理论模型信息组
-- 测量参数设置组  
-- 实时状态监控组
-
-```python
-def create_center_panel(self) -> QFrame  
-```
-**功能**: 创建中心面板
-**返回**: QFrame 对象
-**包含组件**:
-- 3D可视化占位符
-- 实时数据表格
-
-```python
-def create_right_panel(self) -> QFrame
-```
-**功能**: 创建右侧面板  
-**返回**: QFrame 对象
-**包含组件**:
-- 颜色图例组
-- 总体误差统计组
-- 误差分布图表组
-
-##### 子组件创建方法
-
-```python
+##### 信号处理方法
 def create_model_info_group(self) -> QWidget
 ```
 **功能**: 创建理论模型信息组件

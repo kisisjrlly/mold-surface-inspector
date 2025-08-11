@@ -7,9 +7,11 @@
 """
 
 import sys
+import os
 import random
 import math
 import numpy as np
+import pandas as pd
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QHBoxLayout, QGridLayout, QFormLayout, QLabel, 
                                QPushButton, QLineEdit, QTableWidget, QTableWidgetItem,
@@ -20,6 +22,10 @@ from PySide6.QtGui import QAction, QIcon, QFont, QPalette, QColor
 
 from config import AppConfig
 from styles import StyleManager
+from hardware_simulator import HardwareSimulator
+from analysis_worker import AnalysisWorker
+from hardware_simulator import HardwareSimulator
+from analysis_worker import AnalysisWorker
 
 
 class MainWindow(QMainWindow):
@@ -39,6 +45,25 @@ class MainWindow(QMainWindow):
         self.current_x = 150.0
         self.current_angle = 48.0
         self.errors_list = [0.020, 0.025, 0.155]  # 从示例数据开始
+        
+        # 新增：理论点云数据和模拟线程
+        self.theoretical_data = None
+        self.hardware_simulator = None
+        self.analysis_worker = None
+        self.measurement_file_path = "data/live_measurement.csv"
+        
+        # 新增：模拟器和分析器线程
+        self.hardware_simulator = None
+        self.analysis_worker = None
+        self.theoretical_data = None  # 存储加载的理论数据
+        
+        # 新增：3D可视化相关
+        self.matplotlib_canvas = None
+        self.matplotlib_figure = None
+        self.matplotlib_ax = None
+        self.theoretical_scatter = None  # 理论点云散点图
+        self.measured_scatter = None     # 测量点云散点图
+        self.measured_points = []        # 存储测量点数据
         
         self.init_ui()
         self.setup_style()
@@ -367,7 +392,7 @@ class MainWindow(QMainWindow):
         self.viz_layout = QVBoxLayout(self.visualization_widget)
         self.viz_layout.setContentsMargins(0, 0, 0, 0)
         self.viz_layout.setSpacing(0)
-        viz_label = QLabel("3D Visualization Window\n点击'加载理论模型'加载点云数据")
+        viz_label = QLabel("3D Visualization Window\nClick 'Load Theoretical Model' to load point cloud data")
         viz_label.setAlignment(Qt.AlignCenter)
         viz_label.setObjectName("placeholderText")
         self.viz_layout.addWidget(viz_label)
@@ -561,21 +586,91 @@ class MainWindow(QMainWindow):
         title.setObjectName("groupTitle")
         layout.addWidget(title)
         
-        # 图表占位符
-        chart_placeholder = QWidget()
-        chart_placeholder.setObjectName("chartPlaceholder")
-        chart_placeholder.setFixedHeight(200)
-        
-        # 添加占位文字
-        chart_layout = QVBoxLayout(chart_placeholder)
-        chart_label = QLabel("误差分布图表")
-        chart_label.setAlignment(Qt.AlignCenter)
-        chart_label.setObjectName("placeholderText")
-        chart_layout.addWidget(chart_label)
-        
-        layout.addWidget(chart_placeholder)
+        # 创建matplotlib直方图画布
+        try:
+            import matplotlib.pyplot as plt
+            from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+            from matplotlib.figure import Figure
+            
+            # 创建图形
+            self.histogram_figure = Figure(figsize=(4, 3))
+            self.histogram_canvas = FigureCanvas(self.histogram_figure)
+            self.histogram_canvas.setFixedHeight(200)
+            self.histogram_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            
+            # 创建子图
+            self.histogram_ax = self.histogram_figure.add_subplot(111)
+            self.histogram_ax.set_xlabel('Error (mm)', fontsize=8)
+            self.histogram_ax.set_ylabel('Frequency', fontsize=8)
+            self.histogram_ax.tick_params(axis='both', labelsize=8)
+            
+            # 初始化空直方图
+            self.update_error_histogram([])
+            
+            layout.addWidget(self.histogram_canvas)
+            
+        except ImportError:
+            # 如果matplotlib不可用，显示占位符
+            chart_placeholder = QWidget()
+            chart_placeholder.setObjectName("chartPlaceholder")
+            chart_placeholder.setFixedHeight(200)
+            
+            chart_layout = QVBoxLayout(chart_placeholder)
+            chart_label = QLabel("Matplotlib required\nfor error distribution chart")
+            chart_label.setAlignment(Qt.AlignCenter)
+            chart_label.setObjectName("placeholderText")
+            chart_layout.addWidget(chart_label)
+            
+            layout.addWidget(chart_placeholder)
         
         return group_widget
+        
+    def update_error_histogram(self, error_data):
+        """更新误差分布直方图"""
+        try:
+            if not hasattr(self, 'histogram_ax'):
+                return
+                
+            # 清除之前的图形
+            self.histogram_ax.clear()
+            
+            if len(error_data) > 0:
+                # 绘制直方图
+                self.histogram_ax.hist(
+                    error_data, bins=20, alpha=0.7, color='skyblue', edgecolor='black'
+                )
+                
+                # 添加统计线
+                mean_error = np.mean(error_data)
+                self.histogram_ax.axvline(mean_error, color='red', linestyle='--', 
+                                        linewidth=2, label=f'Mean: {mean_error:.3f}')
+                
+                # 添加合格范围线
+                self.histogram_ax.axvline(0.1, color='green', linestyle=':', 
+                                        alpha=0.7, label='Tolerance Range')
+                self.histogram_ax.axvline(-0.1, color='green', linestyle=':', alpha=0.7)
+                
+                self.histogram_ax.legend(fontsize=8)
+                
+            else:
+                # 显示空图表
+                self.histogram_ax.text(0.5, 0.5, 'No Data Available', 
+                                     transform=self.histogram_ax.transAxes,
+                                     ha='center', va='center', fontsize=10)
+            
+            # 设置标签和格式
+            self.histogram_ax.set_xlabel('Error (mm)', fontsize=8)
+            self.histogram_ax.set_ylabel('Frequency', fontsize=8)
+            self.histogram_ax.tick_params(axis='both', labelsize=8)
+            
+            # 调整布局
+            self.histogram_figure.tight_layout()
+            
+            # 刷新画布
+            self.histogram_canvas.draw()
+            
+        except Exception as e:
+            print(f"更新误差直方图时出错: {e}")
         
     def setup_style(self):
         """设置界面样式"""
@@ -629,10 +724,13 @@ class MainWindow(QMainWindow):
             print(f"选择的点云文件路径: {file_path}")
             
             try:
-                # 加载点云数据
-                point_cloud_data = self.load_point_cloud_file(file_path)
+                # 使用HardwareSimulator的静态方法加载点云数据
+                point_cloud_data = HardwareSimulator.load_theoretical_data(file_path)
                 
                 if point_cloud_data is not None:
+                    # 保存理论数据
+                    self.theoretical_data = point_cloud_data
+                    
                     # 更新UI显示
                     import os
                     file_name = os.path.basename(file_path)
@@ -643,9 +741,9 @@ class MainWindow(QMainWindow):
                     self.rotation_range_label.setText(f"数据点: {point_count} 个")
                     
                     # 在3D可视化区域显示点云
-                    self.display_point_cloud_in_3d(point_cloud_data)
+                    self.display_point_cloud_in_3d(point_cloud_data.values)
                     
-                    print(f"成功加载点云数据: {point_count} 个数据点")
+                    print(f"成功加载理论点云数据: {point_count} 个数据点")
                     
                     # 显示成功消息
                     QMessageBox.information(
@@ -673,9 +771,6 @@ class MainWindow(QMainWindow):
             
     def load_point_cloud_file(self, file_path):
         """加载点云数据文件"""
-        import pandas as pd
-        import numpy as np
-        
         try:
             if file_path.endswith('.csv'):
                 # 尝试加载CSV文件
@@ -685,12 +780,15 @@ class MainWindow(QMainWindow):
                 required_cols = ['x_mm', 'y_mm', 'z_mm']
                 if all(col in df.columns for col in required_cols):
                     points = df[required_cols].values
+                    self.theoretical_data = df  # 保存完整的DataFrame
                     return points
                 else:
                     # 尝试其他可能的列名格式
                     alt_cols = ['x', 'y', 'z']
                     if all(col in df.columns for col in alt_cols):
-                        points = df[alt_cols].values
+                        df_renamed = df.rename(columns={'x': 'x_mm', 'y': 'y_mm', 'z': 'z_mm'})
+                        points = df_renamed[required_cols].values
+                        self.theoretical_data = df_renamed  # 保存完整的DataFrame
                         return points
                     else:
                         print(f"CSV文件缺少必要的列。找到的列: {list(df.columns)}")
@@ -714,7 +812,13 @@ class MainWindow(QMainWindow):
                             except ValueError:
                                 continue
                 
-                return np.array(points) if points else None
+                if points:
+                    points_array = np.array(points)
+                    # 创建DataFrame
+                    self.theoretical_data = pd.DataFrame(points_array, columns=['x_mm', 'y_mm', 'z_mm'])
+                    return points_array
+                else:
+                    return None
             
             else:
                 print(f"不支持的文件格式: {file_path}")
@@ -731,14 +835,14 @@ class MainWindow(QMainWindow):
             from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
             from matplotlib.figure import Figure
             
-            # 创建matplotlib图形（由Qt画布自适应大小）
-            fig = Figure()
-            canvas = FigureCanvas(fig)
-            canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            canvas.setMinimumSize(1, 1)
+            # 创建matplotlib图形
+            self.matplotlib_figure = Figure(figsize=(10, 8))
+            self.matplotlib_canvas = FigureCanvas(self.matplotlib_figure)
+            self.matplotlib_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            self.matplotlib_canvas.setMinimumSize(1, 1)
             
             # 创建3D子图
-            ax = fig.add_subplot(111, projection='3d')
+            self.matplotlib_ax = self.matplotlib_figure.add_subplot(111, projection='3d')
             
             # 从点云数据中提取坐标
             if len(point_cloud_data) > 5000:
@@ -752,37 +856,32 @@ class MainWindow(QMainWindow):
             y_coords = sampled_data[:, 1] 
             z_coords = sampled_data[:, 2]
             
-            # 绘制3D散点图
-            scatter = ax.scatter(x_coords, y_coords, zs=z_coords,
-                                 c=z_coords, cmap='viridis', s=1, alpha=0.7)
+            # 绘制理论点云（蓝色，半透明）
+            self.theoretical_scatter = self.matplotlib_ax.scatter(
+                x_coords, y_coords, zs=z_coords,
+                c='lightblue', s=1, alpha=0.3, label='Theoretical Points'
+            )
             
             # 设置标签和标题
-            ax.set_xlabel('X (mm)')
-            ax.set_ylabel('Y (mm)')
-            set_zlabel = getattr(ax, 'set_zlabel', None)
-            if callable(set_zlabel):
-                set_zlabel('Z (mm)')
-            ax.set_title('Theoretical Point Cloud', pad=6)
-            
-            # 让坐标轴尽量占满画布区域
+            self.matplotlib_ax.set_xlabel('X (mm)')
+            self.matplotlib_ax.set_ylabel('Y (mm)')
+            # 对于3D轴，使用try-catch来设置Z标签
             try:
-                ax.set_position((0.02, 0.02, 0.85, 0.96))  # (left, bottom, width, height)
-            except Exception:
+                self.matplotlib_ax.set_zlabel('Z (mm)')
+            except AttributeError:
                 pass
+            self.matplotlib_ax.set_title('Theoretical vs Measured Point Cloud', pad=10)
             
-            # 使用嵌入式颜色条，避免占用主轴外部空间
-            try:
-                from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-                cax = inset_axes(ax, width="3%", height="70%", loc="center right", borderpad=1.2)
-                fig.colorbar(scatter, cax=cax)
-            except Exception:
-                # 回退方案：仍然添加颜色条，但尽量不留太多空白
-                fig.colorbar(scatter, ax=ax, shrink=0.6)
+            # 添加图例
+            self.matplotlib_ax.legend()
+            
+            # 调整布局
+            self.matplotlib_figure.tight_layout()
             
             # 更新3D可视化区域
-            self.update_visualization_widget(canvas)
+            self.update_visualization_widget(self.matplotlib_canvas)
             
-            print(f"3D点云可视化已更新，显示 {len(sampled_data)} 个点")
+            print(f"3D点云可视化已更新，显示 {len(sampled_data)} 个理论点")
             
         except ImportError as e:
             print(f"缺少matplotlib库: {e}")
@@ -793,6 +892,58 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"3D可视化时出错: {e}")
             QMessageBox.warning(self, "可视化错误", f"显示3D点云时出错:\n\n{str(e)}")
+            
+    def add_measured_point_to_3d(self, measured_point, error_analysis):
+        """向3D可视化添加测量点"""
+        try:
+            if self.matplotlib_ax is None:
+                return
+                
+            # 提取测量点坐标
+            x = measured_point['x']
+            y = measured_point['y']
+            z = measured_point['z']
+            
+            # 根据误差确定颜色
+            error_value = error_analysis['radius_error']
+            if error_analysis['status'] == "合格":
+                color = 'green'
+            elif error_analysis['status'] == "注意":
+                color = 'orange'
+            else:
+                color = 'red'
+            
+            # 添加测量点到3D图中
+            self.matplotlib_ax.scatter(
+                [x], [y], [z], 
+                c=[color], s=20, alpha=0.8
+            )
+            
+            # 存储测量点数据用于后续更新
+            self.measured_points.append({
+                'x': x, 'y': y, 'z': z,
+                'error': error_value,
+                'color': color
+            })
+            
+            # 限制测量点数量以提高性能
+            if len(self.measured_points) > 1000:
+                self.measured_points = self.measured_points[-1000:]
+                
+            # 每100个点更新一次显示
+            if len(self.measured_points) % 100 == 0:
+                self.refresh_3d_view()
+                
+        except Exception as e:
+            print(f"添加测量点到3D视图时出错: {e}")
+            
+    def refresh_3d_view(self):
+        """刷新3D视图"""
+        try:
+            if self.matplotlib_canvas:
+                self.matplotlib_canvas.draw()
+        except Exception as e:
+            print(f"刷新3D视图时出错: {e}")
     
     def update_visualization_widget(self, canvas):
         """更新3D可视化窗口部件"""
@@ -823,13 +974,136 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "重置视图", "视图已重置到默认状态")
         
     def start_measurement(self):
-        """开始测量占位符函数"""
+        """开始测量 - 使用新的模拟器系统"""
         print("=== 开始测量功能 ===")
-        print("测量开始")
+        
+        # 检查是否已加载理论数据
+        if self.theoretical_data is None:
+            QMessageBox.warning(
+                self, "无法开始测量", 
+                "请先加载理论点云数据文件才能开始测量。"
+            )
+            return
+        
+        print(f"开始测量，理论数据点数: {len(self.theoretical_data)}")
         
         # 读取测量参数
-        self.read_measurement_parameters()
+        measurement_params = self.get_measurement_parameters()
+        if measurement_params is None:
+            return
         
+        # 停止之前的定时器
+        self.simulation_timer.stop()
+        
+        # 清理之前的线程
+        self.cleanup_threads()
+        
+        # 重置表格和统计数据
+        self.reset_measurement_data()
+        
+        # 创建输出文件路径
+        output_dir = os.path.join(os.getcwd(), "measurement_data")
+        os.makedirs(output_dir, exist_ok=True)
+        measurement_file = os.path.join(output_dir, "live_measurement.csv")
+        
+        # 创建硬件模拟器
+        self.hardware_simulator = HardwareSimulator(
+            theoretical_data=self.theoretical_data,
+            measurement_params=measurement_params,
+            output_file_path=measurement_file
+        )
+        
+        # 创建误差分析工作线程
+        self.analysis_worker = AnalysisWorker(
+            theoretical_data=self.theoretical_data,
+            measurement_file_path=measurement_file
+        )
+        
+        # 连接硬件模拟器信号
+        self.hardware_simulator.measurement_point.connect(self.on_measurement_point)
+        self.hardware_simulator.measurement_finished.connect(self.on_measurement_finished)
+        self.hardware_simulator.measurement_error.connect(self.on_measurement_error)
+        self.hardware_simulator.progress_updated.connect(self.on_progress_updated)
+        
+        # 连接误差分析工作线程信号
+        self.analysis_worker.analysis_result.connect(self.on_analysis_result)
+        self.analysis_worker.statistics_updated.connect(self.on_statistics_updated)
+        self.analysis_worker.error_data_updated.connect(self.on_error_data_updated)
+        self.analysis_worker.analysis_finished.connect(self.on_analysis_finished)
+        self.analysis_worker.analysis_error.connect(self.on_analysis_error)
+        
+        # 启动线程
+        self.hardware_simulator.start()
+        self.analysis_worker.start()
+        
+        # 更新UI状态
+        self.update_ui_measurement_started()
+        
+        print("测量和分析线程已启动")
+        
+    def get_measurement_parameters(self):
+        """获取测量参数"""
+        try:
+            x_min = float(self.x_min_input.text())
+            x_max = float(self.x_max_input.text())
+            x_step = float(self.x_step_input.text())
+            rot_step = float(self.rot_step_input.text())
+            
+            # 验证参数合理性
+            if x_min >= x_max:
+                raise ValueError("X轴最小值必须小于最大值")
+            if x_step <= 0 or rot_step <= 0:
+                raise ValueError("步长值必须大于0")
+                
+            params = {
+                'x_min': x_min,
+                'x_max': x_max,
+                'x_step': x_step,
+                'rot_step': rot_step,
+                'measurement_delay': 0.05  # 50ms延时
+            }
+            
+            print(f"测量参数: {params}")
+            return params
+            
+        except ValueError as e:
+            QMessageBox.warning(self, "参数错误", f"请检查输入的测量参数:\n\n{str(e)}")
+            return None
+            
+    def cleanup_threads(self):
+        """清理之前的线程"""
+        if self.hardware_simulator is not None:
+            self.hardware_simulator.stop()
+            self.hardware_simulator.wait(1000)  # 等待最多1秒
+            self.hardware_simulator = None
+            
+        if self.analysis_worker is not None:
+            self.analysis_worker.stop()
+            self.analysis_worker.wait(1000)  # 等待最多1秒
+            self.analysis_worker = None
+            
+    def reset_measurement_data(self):
+        """重置测量数据"""
+        # 清空表格（保留示例数据的最后3行）
+        self.data_table.setRowCount(3)
+        
+        # 重置统计数据
+        self.errors_list = [0.020, 0.025, 0.155]
+        self.measurement_count = 3
+        self.current_sequence = 104
+        
+        # 清空测量点数据
+        self.measured_points = []
+        
+        # 清空直方图
+        if hasattr(self, 'update_error_histogram'):
+            self.update_error_histogram([])
+        
+        # 更新统计显示
+        self.update_statistics()
+        
+    def update_ui_measurement_started(self):
+        """更新UI状态为测量开始"""
         # 更新按钮状态
         self.start_measure_btn.setEnabled(False)
         self.pause_btn.setEnabled(True)
@@ -840,16 +1114,159 @@ class MainWindow(QMainWindow):
         self.status_text.setText("测量中...")
         self.status_indicator.setStyleSheet("color: #10b981; font-size: 12px;")
         
-        # 启动模拟定时器 (每1秒添加一行数据)
-        self.simulation_timer.start(1000)
+        # 禁用参数输入
+        self.x_min_input.setEnabled(False)
+        self.x_max_input.setEnabled(False)
+        self.x_step_input.setEnabled(False)
+        self.rot_step_input.setEnabled(False)
+        
+    # 新增：信号槽函数
+    def on_measurement_point(self, sequence, x_pos, angle_deg, measured_radius):
+        """处理硬件模拟器的测量点信号"""
+        print(f"收到测量点: 序号={sequence}, X={x_pos}, 角度={angle_deg}, 半径={measured_radius}")
+        
+        # 更新实时状态
+        self.current_x = x_pos
+        self.current_angle = angle_deg
+        self.current_x_label.setText(f"{x_pos:.1f} mm")
+        self.current_angle_label.setText(f"{angle_deg:.1f}°")
+        
+    def on_analysis_result(self, result):
+        """处理误差分析结果信号"""
+        try:
+            # 提取数据
+            sequence = result['sequence']
+            x_pos = result['x_pos']
+            angle_deg = result['angle_deg']
+            measured_radius = result['measured_radius']
+            theoretical_radius = result['theoretical_radius']
+            error_analysis = result['error_analysis']
+            measured_point = result['measured_point']
+            
+            # 添加到表格
+            self.add_analysis_result_to_table(
+                sequence, x_pos, angle_deg, measured_radius,
+                theoretical_radius, error_analysis
+            )
+            
+            # 添加测量点到3D可视化
+            self.add_measured_point_to_3d(measured_point, error_analysis)
+            
+            print(f"分析结果已添加到表格和3D视图: 序号={sequence}, 误差={error_analysis['radius_error']:.6f}")
+            
+        except Exception as e:
+            print(f"处理分析结果时出错: {e}")
+            
+    def add_analysis_result_to_table(self, sequence, x_pos, angle_deg, measured_radius, theoretical_radius, error_analysis):
+        """将分析结果添加到表格"""
+        row = self.data_table.rowCount()
+        self.data_table.insertRow(row)
+        
+        # 准备数据
+        items = [
+            str(sequence),
+            f"{x_pos:.1f}",
+            f"{angle_deg:.1f}",
+            f"{measured_radius:.3f}",
+            f"{theoretical_radius:.3f}",
+            f"{error_analysis['radius_error']:+.3f}",
+            error_analysis['status']
+        ]
+        
+        # 添加数据到表格
+        for col, value in enumerate(items):
+            item = QTableWidgetItem(value)
+            
+            # 根据状态设置颜色
+            if error_analysis['status'] == "超差!":
+                item.setBackground(QColor("#fef3c7"))
+            elif error_analysis['status'] == "注意":
+                item.setBackground(QColor("#fef0e6"))
+                
+            self.data_table.setItem(row, col, item)
+            
+        # 自动滚动到最新行
+        self.data_table.scrollToBottom()
+        
+    def on_statistics_updated(self, statistics):
+        """处理统计数据更新信号"""
+        # 更新统计标签
+        self.max_error_label.setText(f"{statistics['max_error']:+.3f} mm")
+        self.min_error_label.setText(f"{statistics['min_error']:+.3f} mm")
+        self.avg_error_label.setText(f"{statistics['avg_error']:+.3f} mm")
+        self.std_error_label.setText(f"{statistics['std_error']:.3f} mm")
+        
+        # 更新表格状态
+        total_points = statistics['total_points']
+        within_tolerance = statistics['within_tolerance_count']
+        self.table_status_label.setText(
+            f"测量中... (已完成 {total_points} 点，合格率: {within_tolerance/max(1,total_points)*100:.1f}%)"
+        )
+        
+        # 更新误差分布直方图
+        if hasattr(self, 'errors_list'):
+            self.update_error_histogram(self.errors_list)
+            
+    def on_error_data_updated(self, error_data):
+        """处理误差数据更新信号 - 用于直方图"""
+        try:
+            # 更新误差分布直方图
+            self.update_error_histogram(error_data)
+        except Exception as e:
+            print(f"更新误差直方图时出错: {e}")
+        
+    def on_progress_updated(self, current_point, total_points):
+        """处理进度更新信号"""
+        progress_percent = (current_point / max(1, total_points)) * 100
+        print(f"测量进度: {current_point}/{total_points} ({progress_percent:.1f}%)")
+        
+    def on_measurement_finished(self):
+        """处理测量完成信号"""
+        print("硬件模拟器测量完成")
+        
+    def on_analysis_finished(self):
+        """处理分析完成信号"""
+        print("误差分析完成")
+        
+        # 更新UI状态
+        self.update_ui_measurement_finished()
+        
+    def on_measurement_error(self, error_msg):
+        """处理测量错误信号"""
+        print(f"测量错误: {error_msg}")
+        QMessageBox.warning(self, "测量错误", error_msg)
+        
+    def on_analysis_error(self, error_msg):
+        """处理分析错误信号"""
+        print(f"分析错误: {error_msg}")
+        QMessageBox.warning(self, "分析错误", error_msg)
+        
+    def update_ui_measurement_finished(self):
+        """更新UI状态为测量完成"""
+        # 更新按钮状态
+        self.start_measure_btn.setEnabled(True)
+        self.pause_btn.setEnabled(False)
+        self.stop_btn.setEnabled(False)
+        
+        # 更新状态
+        self.is_measuring = False
+        self.status_text.setText("测量完成")
+        self.status_indicator.setStyleSheet("color: #10b981; font-size: 12px;")
+        
+        # 重新启用参数输入
+        self.x_min_input.setEnabled(True)
+        self.x_max_input.setEnabled(True)
+        self.x_step_input.setEnabled(True)
+        self.rot_step_input.setEnabled(True)
         
     def pause_measurement(self):
-        """暂停测量占位符函数"""
+        """暂停测量 - 使用新的模拟器系统"""
         print("=== 暂停测量功能 ===")
         
-        if self.is_measuring:
-            # 暂停定时器
-            self.simulation_timer.stop()
+        if self.is_measuring and self.hardware_simulator and self.analysis_worker:
+            # 暂停两个线程
+            self.hardware_simulator.pause()
+            self.analysis_worker.pause()
             
             # 更新状态
             self.is_measuring = False
@@ -863,11 +1280,11 @@ class MainWindow(QMainWindow):
             print("测量已暂停")
         
     def stop_measurement(self):
-        """停止测量占位符函数"""
+        """停止测量 - 使用新的模拟器系统"""
         print("=== 停止测量功能 ===")
         
-        # 停止定时器
-        self.simulation_timer.stop()
+        # 停止并清理线程
+        self.cleanup_threads()
         
         # 重置状态
         self.is_measuring = False
@@ -875,9 +1292,7 @@ class MainWindow(QMainWindow):
         self.status_indicator.setStyleSheet("color: #ef4444; font-size: 12px;")
         
         # 重置按钮状态
-        self.start_measure_btn.setEnabled(True)
-        self.pause_btn.setEnabled(False)
-        self.stop_btn.setEnabled(False)
+        self.update_ui_measurement_finished()
         
         print("测量已停止")
         

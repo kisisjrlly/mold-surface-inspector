@@ -26,13 +26,17 @@ class AnalysisWorker(QThread):
     analysis_finished = Signal()  # 分析完成信号
     analysis_error = Signal(str)  # 错误信号
     
-    def __init__(self, theoretical_data, measurement_file_path="live_measurement.csv"):
+    def __init__(self, theoretical_data, measurement_file_path="live_measurement.csv", 
+                 tolerance_qualified=0.1, tolerance_attention=0.2, tolerance_over_limit=0.3):
         """
         初始化误差分析工作线程
         
         Args:
             theoretical_data: Pandas DataFrame，理论点云数据
             measurement_file_path: str，测量数据文件路径
+            tolerance_qualified: float，合格阈值（mm）
+            tolerance_attention: float，注意阈值（mm）
+            tolerance_over_limit: float，超差阈值（mm）
         """
         super().__init__()
         
@@ -40,6 +44,11 @@ class AnalysisWorker(QThread):
         self.measurement_file_path = measurement_file_path
         self.is_running = False
         self.is_paused = False
+        
+        # 误差阈值参数
+        self.tolerance_qualified = tolerance_qualified
+        self.tolerance_attention = tolerance_attention
+        self.tolerance_over_limit = tolerance_over_limit
         
         # 数据缓存
         self.processed_lines = 0  # 已处理的行数
@@ -54,7 +63,7 @@ class AnalysisWorker(QThread):
             'avg_error': 0.0,
             'std_error': 0.0,
             'within_tolerance_count': 0,
-            'tolerance_threshold': 0.1  # 合格阈值 ±0.1mm
+            'tolerance_threshold': tolerance_qualified  # 使用参数中的合格阈值
         }
         
         # 创建理论数据的快速查找索引
@@ -320,17 +329,20 @@ class AnalysisWorker(QThread):
         # 这里简化处理，使用总误差减去径向误差的估算
         tangential_error = math.sqrt(max(0, euclidean_error**2 - radial_error**2))
         
-        # 6. 误差状态判定
-        tolerance = self.statistics['tolerance_threshold']
-        if abs(radius_error) <= tolerance:
+        # 6. 误差状态判定 - 使用动态阈值
+        abs_radius_error = abs(radius_error)
+        if abs_radius_error <= self.tolerance_qualified:
             status = "合格"
             status_color = "green"
-        elif abs(radius_error) <= tolerance * 2:
+        elif abs_radius_error <= self.tolerance_attention:
             status = "注意"
             status_color = "orange"
-        else:
+        elif abs_radius_error <= self.tolerance_over_limit:
             status = "超差!"
             status_color = "red"
+        else:
+            status = "严重超差!"
+            status_color = "darkred"
             
         return {
             'radius_error': radius_error,
@@ -352,8 +364,8 @@ class AnalysisWorker(QThread):
         # 更新计数
         self.statistics['total_points'] += 1
         
-        # 检查容差范围
-        if abs(error_value) <= self.statistics['tolerance_threshold']:
+        # 检查容差范围 - 使用合格阈值
+        if abs(error_value) <= self.tolerance_qualified:
             self.statistics['within_tolerance_count'] += 1
             
         # 更新极值

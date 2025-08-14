@@ -14,7 +14,7 @@
 
 - Python 3.8+
 - conda 环境管理器
-- 已创建的 pyside-env 环境，包含 PySide6
+- 创建 pyside-env conda 环境，包含 PySide6
 
 ### 安装和运行
 

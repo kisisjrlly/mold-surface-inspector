@@ -30,6 +30,11 @@ class AppConfig:
     DEFAULT_X_STEP = 10.0
     DEFAULT_ROT_STEP = 1.5
     
+    # 默认误差阈值参数（mm）
+    DEFAULT_TOLERANCE_QUALIFIED = 0.1    # 合格阈值：±0.1mm
+    DEFAULT_TOLERANCE_ATTENTION = 0.2    # 注意阈值：±0.2mm
+    DEFAULT_TOLERANCE_OVER_LIMIT = 0.3   # 超差阈值：±0.3mm
+    
     # 更新频率（毫秒）
     DATA_UPDATE_INTERVAL = 2000
     

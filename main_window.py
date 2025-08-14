@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QHBoxLayout, QGridLayout, QFormLayout, QLabel, 
                                QPushButton, QLineEdit, QTableWidget, QTableWidgetItem,
                                QMenuBar, QToolBar, QSplitter, QFrame, QHeaderView,
-                               QSizePolicy, QFileDialog, QMessageBox)
+                               QSizePolicy, QFileDialog, QMessageBox, QScrollArea)
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QIcon, QFont, QPalette, QColor
 
@@ -178,27 +178,48 @@ class MainWindow(QMainWindow):
         """创建左侧面板 - 测量设置与控制"""
         panel = QFrame()
         panel.setObjectName("leftPanel")
-        panel.setFixedWidth(320)  # 固定宽度320px，与UI.png一致
+        panel.setMinimumWidth(320)  # 最小宽度320px
+        panel.setMaximumWidth(380)  # 最大宽度380px，允许一定的伸缩
         panel.setFrameStyle(QFrame.StyledPanel)
         
-        layout = QVBoxLayout(panel)
-        layout.setSpacing(16)
-        layout.setContentsMargins(16, 16, 16, 16)
+        # 创建滚动区域
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        
+        # 滚动区域的内容窗口
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout(scroll_widget)
+        scroll_layout.setSpacing(12)
+        scroll_layout.setContentsMargins(16, 16, 16, 16)
         
         # 理论模型信息
         model_group = self.create_model_info_group()
-        layout.addWidget(model_group)
+        model_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        scroll_layout.addWidget(model_group)
         
         # 测量参数设置
         params_group = self.create_measurement_params_group()
-        layout.addWidget(params_group)
+        params_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        scroll_layout.addWidget(params_group)
         
         # 实时状态监控
         status_group = self.create_status_monitor_group()
-        layout.addWidget(status_group)
+        status_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        scroll_layout.addWidget(status_group)
         
         # 添加伸缩空间
-        layout.addStretch()
+        scroll_layout.addStretch()
+        
+        # 将内容窗口添加到滚动区域
+        scroll_area.setWidget(scroll_widget)
+        
+        # 主面板布局
+        panel_layout = QVBoxLayout(panel)
+        panel_layout.setContentsMargins(0, 0, 0, 0)
+        panel_layout.addWidget(scroll_area)
         
         return panel
         
@@ -248,61 +269,173 @@ class MainWindow(QMainWindow):
     def create_measurement_params_group(self):
         """创建测量参数设置组"""
         group_widget = QWidget()
+        group_widget.setMinimumHeight(400)  # 设置最小高度
+        group_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         layout = QVBoxLayout(group_widget)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
         
         # 标题
         title = QLabel("测量参数设置")
         title.setObjectName("groupTitle")
         layout.addWidget(title)
         
-        # 参数设置表单
-        form_layout = QGridLayout()
-        form_layout.setSpacing(12)
+        # 参数表单布局
+        form_widget = QWidget()
+        form_layout = QVBoxLayout(form_widget)
+        form_layout.setSpacing(6)
+        form_layout.setContentsMargins(0, 0, 0, 0)
         
         # X轴测量范围
-        form_layout.addWidget(QLabel("X轴测量范围"), 0, 0, 1, 4)
-        range_layout = QHBoxLayout()
+        x_range_container = QWidget()
+        x_range_layout = QVBoxLayout(x_range_container)
+        x_range_layout.setContentsMargins(0, 0, 0, 0)
+        x_range_layout.setSpacing(4)
+        
+        x_range_label = QLabel("X轴测量范围")
+        x_range_layout.addWidget(x_range_label)
+        
+        x_inputs_layout = QHBoxLayout()
+        x_inputs_layout.setSpacing(6)
         self.x_min_input = QLineEdit(str(AppConfig.DEFAULT_X_MIN))
         self.x_min_input.setFixedWidth(60)
+        self.x_min_input.setMinimumHeight(24)
         self.x_max_input = QLineEdit(str(AppConfig.DEFAULT_X_MAX))
-        self.x_max_input.setFixedWidth(60)
-        range_layout.addWidget(self.x_min_input)
-        range_layout.addWidget(QLabel("至"))
-        range_layout.addWidget(self.x_max_input)
-        range_layout.addWidget(QLabel("mm"))
-        range_layout.addStretch()
+        self.x_max_input.setFixedWidth(60) 
+        self.x_max_input.setMinimumHeight(24)
         
-        range_widget = QWidget()
-        range_widget.setLayout(range_layout)
-        form_layout.addWidget(range_widget, 1, 0, 1, 4)
+        x_inputs_layout.addWidget(self.x_min_input)
+        x_inputs_layout.addWidget(QLabel("至"))
+        x_inputs_layout.addWidget(self.x_max_input)
+        x_inputs_layout.addWidget(QLabel("mm"))
+        x_inputs_layout.addStretch()
+        x_range_layout.addLayout(x_inputs_layout)
+        form_layout.addWidget(x_range_container)
         
         # X轴步长
-        form_layout.addWidget(QLabel("X轴步长"), 2, 0)
-        step_layout = QHBoxLayout()
+        x_step_container = QWidget()
+        x_step_layout = QVBoxLayout(x_step_container)
+        x_step_layout.setContentsMargins(0, 0, 0, 0)
+        x_step_layout.setSpacing(4)
+        
+        x_step_label = QLabel("X轴步长")
+        x_step_layout.addWidget(x_step_label)
+        
+        x_step_inputs_layout = QHBoxLayout()
+        x_step_inputs_layout.setSpacing(6)
         self.x_step_input = QLineEdit(str(AppConfig.DEFAULT_X_STEP))
         self.x_step_input.setFixedWidth(60)
-        step_layout.addWidget(self.x_step_input)
-        step_layout.addWidget(QLabel("mm"))
-        step_layout.addStretch()
-        
-        step_widget = QWidget()
-        step_widget.setLayout(step_layout)
-        form_layout.addWidget(step_widget, 3, 0, 1, 4)
+        self.x_step_input.setMinimumHeight(24)
+        x_step_inputs_layout.addWidget(self.x_step_input)
+        x_step_inputs_layout.addWidget(QLabel("mm"))
+        x_step_inputs_layout.addStretch()
+        x_step_layout.addLayout(x_step_inputs_layout)
+        form_layout.addWidget(x_step_container)
         
         # 旋转轴步长
-        form_layout.addWidget(QLabel("旋转轴步长"), 4, 0)
-        rot_step_layout = QHBoxLayout()
+        rot_step_container = QWidget()
+        rot_step_layout = QVBoxLayout(rot_step_container)
+        rot_step_layout.setContentsMargins(0, 0, 0, 0)
+        rot_step_layout.setSpacing(4)
+        
+        rot_step_label = QLabel("旋转轴步长")
+        rot_step_layout.addWidget(rot_step_label)
+        
+        rot_step_inputs_layout = QHBoxLayout()
+        rot_step_inputs_layout.setSpacing(6)
         self.rot_step_input = QLineEdit(str(AppConfig.DEFAULT_ROT_STEP))
         self.rot_step_input.setFixedWidth(60)
-        rot_step_layout.addWidget(self.rot_step_input)
-        rot_step_layout.addWidget(QLabel("°"))
-        rot_step_layout.addStretch()
+        self.rot_step_input.setMinimumHeight(24)
+        rot_step_inputs_layout.addWidget(self.rot_step_input)
+        rot_step_inputs_layout.addWidget(QLabel("°"))
+        rot_step_inputs_layout.addStretch()
+        rot_step_layout.addLayout(rot_step_inputs_layout)
+        form_layout.addWidget(rot_step_container)
         
-        rot_step_widget = QWidget()
-        rot_step_widget.setLayout(rot_step_layout)
-        form_layout.addWidget(rot_step_widget, 5, 0, 1, 4)
+        # 分隔线
+        form_layout.addSpacing(8)
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        separator.setFixedHeight(2)
+        form_layout.addWidget(separator)
+        form_layout.addSpacing(8)
         
-        layout.addLayout(form_layout)
+        # 误差阈值设置标题
+        threshold_title = QLabel("误差阈值设置")
+        threshold_title.setObjectName("groupTitle")
+        form_layout.addWidget(threshold_title)
+        
+        # 合格阈值
+        qualified_container = QWidget()
+        qualified_layout = QVBoxLayout(qualified_container)
+        qualified_layout.setContentsMargins(0, 0, 0, 0)
+        qualified_layout.setSpacing(4)
+        
+        qualified_label = QLabel("合格阈值")
+        qualified_layout.addWidget(qualified_label)
+        
+        qualified_inputs_layout = QHBoxLayout()
+        qualified_inputs_layout.setSpacing(6)
+        qualified_inputs_layout.addWidget(QLabel("±"))
+        self.tolerance_qualified_input = QLineEdit(str(AppConfig.DEFAULT_TOLERANCE_QUALIFIED))
+        self.tolerance_qualified_input.setFixedWidth(60)
+        self.tolerance_qualified_input.setMinimumHeight(24)
+        qualified_inputs_layout.addWidget(self.tolerance_qualified_input)
+        qualified_inputs_layout.addWidget(QLabel("mm"))
+        qualified_inputs_layout.addStretch()
+        qualified_layout.addLayout(qualified_inputs_layout)
+        form_layout.addWidget(qualified_container)
+        
+        # 注意阈值
+        attention_container = QWidget()
+        attention_layout = QVBoxLayout(attention_container)
+        attention_layout.setContentsMargins(0, 0, 0, 0)
+        attention_layout.setSpacing(4)
+        
+        attention_label = QLabel("注意阈值")
+        attention_layout.addWidget(attention_label)
+        
+        attention_inputs_layout = QHBoxLayout()
+        attention_inputs_layout.setSpacing(6)
+        attention_inputs_layout.addWidget(QLabel("±"))
+        self.tolerance_attention_input = QLineEdit(str(AppConfig.DEFAULT_TOLERANCE_ATTENTION))
+        self.tolerance_attention_input.setFixedWidth(60)
+        self.tolerance_attention_input.setMinimumHeight(24)
+        attention_inputs_layout.addWidget(self.tolerance_attention_input)
+        attention_inputs_layout.addWidget(QLabel("mm"))
+        attention_inputs_layout.addStretch()
+        attention_layout.addLayout(attention_inputs_layout)
+        form_layout.addWidget(attention_container)
+        
+        # 超差阈值
+        over_limit_container = QWidget()
+        over_limit_layout = QVBoxLayout(over_limit_container)
+        over_limit_layout.setContentsMargins(0, 0, 0, 0)
+        over_limit_layout.setSpacing(4)
+        
+        over_limit_label = QLabel("超差阈值")
+        over_limit_layout.addWidget(over_limit_label)
+        
+        over_limit_inputs_layout = QHBoxLayout()
+        over_limit_inputs_layout.setSpacing(6)
+        over_limit_inputs_layout.addWidget(QLabel("±"))
+        self.tolerance_over_limit_input = QLineEdit(str(AppConfig.DEFAULT_TOLERANCE_OVER_LIMIT))
+        self.tolerance_over_limit_input.setFixedWidth(60)
+        self.tolerance_over_limit_input.setMinimumHeight(24)
+        over_limit_inputs_layout.addWidget(self.tolerance_over_limit_input)
+        over_limit_inputs_layout.addWidget(QLabel("mm"))
+        over_limit_inputs_layout.addStretch()
+        over_limit_layout.addLayout(over_limit_inputs_layout)
+        form_layout.addWidget(over_limit_container)
+        
+        layout.addWidget(form_widget)
+        return group_widget
+        over_limit_layout.addStretch()
+        params_layout.addLayout(over_limit_layout)
+        
+        # 将参数布局添加到主布局
+        layout.addLayout(params_layout)
         
         return group_widget
         
@@ -725,7 +858,7 @@ class MainWindow(QMainWindow):
             
             try:
                 # 使用HardwareSimulator的静态方法加载点云数据
-                point_cloud_data = HardwareSimulator.load_theoretical_data(file_path)
+                point_cloud_data = self.load_theoretical_data(file_path)
                 
                 if point_cloud_data is not None:
                     # 保存理论数据
@@ -768,66 +901,45 @@ class MainWindow(QMainWindow):
                 )
         else:
             print("用户取消了文件选择")
+
+    def load_theoretical_data(self, file_path):
+        """
+        静态方法：加载理论点云数据
+        
+        Args:
+            file_path: str，理论点云文件路径
             
-    def load_point_cloud_file(self, file_path):
-        """加载点云数据文件"""
+        Returns:
+            pandas.DataFrame 或 None
+        """
         try:
             if file_path.endswith('.csv'):
-                # 尝试加载CSV文件
                 df = pd.read_csv(file_path)
                 
-                # 检查是否有必要的列
+                # 检查必要的列
                 required_cols = ['x_mm', 'y_mm', 'z_mm']
                 if all(col in df.columns for col in required_cols):
-                    points = df[required_cols].values
-                    self.theoretical_data = df  # 保存完整的DataFrame
-                    return points
+                    print(f"成功加载理论数据: {len(df)} 个点")
+                    return df
                 else:
-                    # 尝试其他可能的列名格式
+                    # 尝试其他列名格式
                     alt_cols = ['x', 'y', 'z']
                     if all(col in df.columns for col in alt_cols):
-                        df_renamed = df.rename(columns={'x': 'x_mm', 'y': 'y_mm', 'z': 'z_mm'})
-                        points = df_renamed[required_cols].values
-                        self.theoretical_data = df_renamed  # 保存完整的DataFrame
-                        return points
+                        df.rename(columns={'x': 'x_mm', 'y': 'y_mm', 'z': 'z_mm'}, inplace=True)
+                        print(f"成功加载理论数据(重命名列): {len(df)} 个点")
+                        return df
                     else:
-                        print(f"CSV文件缺少必要的列。找到的列: {list(df.columns)}")
-                        print(f"需要的列: {required_cols} 或 {alt_cols}")
+                        print(f"CSV文件缺少必要的列。找到: {list(df.columns)}")
                         return None
-                    
-            elif file_path.endswith('.txt'):
-                # 尝试加载文本文件
-                with open(file_path, 'r') as f:
-                    lines = f.readlines()
-                
-                points = []
-                for line in lines:
-                    line = line.strip()
-                    if line and not line.startswith('#'):
-                        parts = line.split()
-                        if len(parts) >= 3:  # x, y, z
-                            try:
-                                x, y, z = float(parts[0]), float(parts[1]), float(parts[2])
-                                points.append([x, y, z])
-                            except ValueError:
-                                continue
-                
-                if points:
-                    points_array = np.array(points)
-                    # 创建DataFrame
-                    self.theoretical_data = pd.DataFrame(points_array, columns=['x_mm', 'y_mm', 'z_mm'])
-                    return points_array
-                else:
-                    return None
-            
+                        
             else:
                 print(f"不支持的文件格式: {file_path}")
                 return None
                 
         except Exception as e:
-            print(f"读取点云文件时出错: {e}")
-            return None
-    
+            print(f"加载理论数据失败: {e}")
+            return None        
+
     def display_point_cloud_in_3d(self, point_cloud_data):
         """在3D可视化区域显示点云数据"""
         try:
@@ -1016,7 +1128,10 @@ class MainWindow(QMainWindow):
         # 创建误差分析工作线程
         self.analysis_worker = AnalysisWorker(
             theoretical_data=self.theoretical_data,
-            measurement_file_path=measurement_file
+            measurement_file_path=measurement_file,
+            tolerance_qualified=measurement_params['tolerance_qualified'],
+            tolerance_attention=measurement_params['tolerance_attention'],
+            tolerance_over_limit=measurement_params['tolerance_over_limit']
         )
         
         # 连接硬件模拟器信号
@@ -1049,18 +1164,31 @@ class MainWindow(QMainWindow):
             x_step = float(self.x_step_input.text())
             rot_step = float(self.rot_step_input.text())
             
+            # 读取误差阈值参数
+            tolerance_qualified = float(self.tolerance_qualified_input.text())
+            tolerance_attention = float(self.tolerance_attention_input.text())
+            tolerance_over_limit = float(self.tolerance_over_limit_input.text())
+            
             # 验证参数合理性
             if x_min >= x_max:
                 raise ValueError("X轴最小值必须小于最大值")
             if x_step <= 0 or rot_step <= 0:
                 raise ValueError("步长值必须大于0")
+            if tolerance_qualified <= 0 or tolerance_attention <= 0 or tolerance_over_limit <= 0:
+                raise ValueError("误差阈值必须大于0")
+            if tolerance_qualified >= tolerance_attention or tolerance_attention >= tolerance_over_limit:
+                raise ValueError("误差阈值必须满足：合格 < 注意 < 超差")
                 
             params = {
                 'x_min': x_min,
                 'x_max': x_max,
                 'x_step': x_step,
                 'rot_step': rot_step,
-                'measurement_delay': 0.05  # 50ms延时
+                'measurement_delay': 0.05,  # 50ms延时
+                # 误差阈值参数
+                'tolerance_qualified': tolerance_qualified,
+                'tolerance_attention': tolerance_attention,
+                'tolerance_over_limit': tolerance_over_limit
             }
             
             print(f"测量参数: {params}")
@@ -1119,6 +1247,10 @@ class MainWindow(QMainWindow):
         self.x_max_input.setEnabled(False)
         self.x_step_input.setEnabled(False)
         self.rot_step_input.setEnabled(False)
+        # 禁用误差阈值输入
+        self.tolerance_qualified_input.setEnabled(False)
+        self.tolerance_attention_input.setEnabled(False)
+        self.tolerance_over_limit_input.setEnabled(False)
         
     # 新增：信号槽函数
     def on_measurement_point(self, sequence, x_pos, angle_deg, measured_radius):
@@ -1258,6 +1390,10 @@ class MainWindow(QMainWindow):
         self.x_max_input.setEnabled(True)
         self.x_step_input.setEnabled(True)
         self.rot_step_input.setEnabled(True)
+        # 重新启用误差阈值输入
+        self.tolerance_qualified_input.setEnabled(True)
+        self.tolerance_attention_input.setEnabled(True)
+        self.tolerance_over_limit_input.setEnabled(True)
         
     def pause_measurement(self):
         """暂停测量 - 使用新的模拟器系统"""

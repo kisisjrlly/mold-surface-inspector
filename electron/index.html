@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模具曲面精度分析系统 - 双探头检测</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #181818;
+            color: #e2e8f0;
+            overflow: hidden;
+        }
+        #three-container {
+            position: fixed;
+            top: 0;
+            left: 320px;
+            right: 320px;
+            bottom: 0;
+        }
+        .sidebar-left {
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 320px;
+            background: rgba(30, 30, 30, 0.95);
+            border-right: 1px solid #333;
+            padding: 16px;
+            overflow-y: auto;
+        }
+        .sidebar-right {
+            position: fixed;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 320px;
+            background: rgba(30, 30, 30, 0.95);
+            border-left: 1px solid #333;
+            padding: 16px;
+            overflow-y: auto;
+        }
+        .card {
+            background: rgba(40, 40, 40, 0.9);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 1px solid #444;
+        }
+        .card-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #94a3b8;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 8px;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            font-size: 13px;
+        }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-primary:disabled { background: #475569; cursor: not-allowed; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover { background: #059669; }
+        .btn-success:disabled { background: #475569; cursor: not-allowed; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-danger:disabled { background: #475569; cursor: not-allowed; }
+        .btn-secondary { background: #475569; color: white; }
+        .btn-secondary:hover { background: #64748b; }
+        .input-group {
+            margin-bottom: 10px;
+        }
+        .input-group label {
+            display: block;
+            font-size: 11px;
+            color: #94a3b8;
+            margin-bottom: 4px;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 8px 10px;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #e2e8f0;
+            font-size: 13px;
+            font-family: 'Consolas', monospace;
+        }
+        .input-group input:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        .stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            font-family: 'Consolas', monospace;
+            color: #60a5fa;
+        }
+        .stat-label {
+            font-size: 11px;
+            color: #64748b;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-connected { background: #10b981; box-shadow: 0 0 8px #10b981; }
+        .status-disconnected { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+        .status-scanning { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; animation: pulse 1s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .probe-color-1 { color: #4ade80; }  /* 绿色 - 1#探头 */
+        .probe-color-2 { color: #60a5fa; }  /* 蓝色 - 2#探头 */
+        .progress-bar {
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+        .progress-bar-fill-1 {
+            height: 100%;
+            background: linear-gradient(90deg, #4ade80, #22c55e);
+            transition: width 0.3s;
+        }
+        .progress-bar-fill-2 {
+            height: 100%;
+            background: linear-gradient(90deg, #60a5fa, #3b82f6);
+            transition: width 0.3s;
+        }
+        .led {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+            box-shadow: 0 0 5px currentColor;
+        }
+        
+        /* 连接配置面板 */
+        #connectionPanel {
+            position: fixed;
+            inset: 0;
+            background: rgba(24, 24, 24, 0.98);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        #connectionPanel.hidden { display: none; }
+        #mainUI.hidden { display: none; }
+        .config-box {
+            background: rgba(40, 40, 40, 0.95);
+            border-radius: 12px;
+            padding: 32px;
+            max-width: 480px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            border: 1px solid #444;
+        }
+        .alert {
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 12px;
+            font-size: 13px;
+        }
+        .alert-success { background: #065f46; color: #a7f3d0; }
+        .alert-error { background: #7f1d1d; color: #fecaca; }
+        .alert-info { background: #1e3a8a; color: #bfdbfe; }
+        .alert.hidden { display: none; }
+
+        /* 探头徽章 */
+        .probe-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 700;
+            color: white;
+            letter-spacing: 0.5px;
+        }
+        .probe-badge.probe-1 {
+            background: linear-gradient(135deg, #10b981, #059669);
+            box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+        }
+        .probe-badge.probe-2 {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+        }
+
+        /* 数据表格 */
+        .data-table-container {
+            max-height: 280px;
+            overflow-y: auto;
+            background: #1a1a1a;
+            border-radius: 6px;
+            border: 1px solid #333;
+            margin-top: 8px;
+        }
+        .data-table-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .data-table-container::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+        .data-table-container::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 4px;
+        }
+        .data-table-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        #dataTable {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+            font-family: 'Consolas', 'Courier New', monospace;
+        }
+        #dataTable thead {
+            position: sticky;
+            top: 0;
+            background: #2a2a2a;
+            z-index: 10;
+        }
+        #dataTable th {
+            padding: 8px 4px;
+            text-align: center;
+            border-bottom: 2px solid #444;
+            color: #94a3b8;
+            font-weight: 600;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        #dataTable td {
+            padding: 6px 4px;
+            text-align: center;
+            border-bottom: 1px solid #2a2a2a;
+            color: #cbd5e1;
+        }
+        #dataTable tbody tr:hover {
+            background: #252525;
+        }
+        .error-good { color: #4ade80; }
+        .error-warn { color: #fbbf24; }
+        .error-bad { color: #f87171; }
+    </style>
+</head>
+<body>
+    <!-- 连接配置面板 -->
+    <div id="connectionPanel">
+        <div class="config-box">
+            <div class="flex items-center justify-between mb-2">
+                <h1 class="text-2xl font-bold text-white">模具曲面精度分析系统</h1>
+                <span class="text-xs bg-purple-600 text-white px-2 py-1 rounded">双探头版</span>
+            </div>
+            <p class="text-center text-gray-400 mb-6 text-sm">Dual-Probe Mold Surface Inspection System</p>
+            
+            <div class="space-y-4">
+                <div class="input-group">
+                    <label>PLC IP 地址</label>
+                    <input id="plcIpInput" type="text" value="127.0.0.1" placeholder="例如: 192.168.1.100">
+                    <p class="text-xs text-gray-500 mt-1">💡 仿真模式使用 127.0.0.1，真实 PLC 填写实际 IP</p>
+                </div>
+                
+                <div class="input-group">
+                    <label>Modbus TCP 端口</label>
+                    <input id="plcPortInput" type="number" value="502" placeholder="502">
+                </div>
+                
+                <div id="connectionStatus" class="alert hidden"></div>
+                
+                <button id="connectBtn" class="btn btn-primary w-full" style="padding: 14px;">
+                    <span id="connectBtnText">🔌 连接 PLC</span>
+                </button>
+                
+                <div class="text-xs text-gray-500 text-center mt-4">
+                    <p>仿真模式前，请先在终端运行：</p>
+                    <code class="bg-gray-900 px-2 py-1 rounded text-green-400">python modbus_sim_server.py</code>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主界面 -->
+    <div id="mainUI" class="hidden">
+        <!-- 左侧控制面板 -->
+        <div class="sidebar-left">
+            <div class="flex items-center justify-between mb-4">
+                <h1 class="text-lg font-bold text-white">检测设备数字孪生</h1>
+                <span class="text-xs bg-purple-600 text-white px-2 py-0.5 rounded">双探头版</span>
+            </div>
+            
+            <!-- 连接状态 -->
+            <div class="card">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <span id="status-indicator" class="status-indicator status-disconnected"></span>
+                        <span id="status-text" class="text-sm">未连接</span>
+                    </div>
+                    <span id="scanPhase" class="font-mono text-xs text-gray-400">待机</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-2">
+                    PLC: <span id="connectedPlcIp">-</span>:<span id="connectedPlcPort">-</span>
+                </div>
+            </div>
+
+            <!-- 双探头位置监视 -->
+            <div class="card">
+                <div class="card-title">探头位置</div>
+                
+                <!-- 1#探头 (绿色) -->
+                <div class="mb-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs flex items-center">
+                            <span class="led bg-green-500 text-green-500"></span>
+                            1# 探头 (左→中)
+                        </span>
+                        <span id="x1Pos" class="font-mono text-green-400">-300.00</span>
+                        <span class="text-xs text-gray-500">mm</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="x1Progress" class="progress-bar-fill-1" style="width: 0%"></div>
+                    </div>
+                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>-300</span>
+                        <span>0</span>
+                        <span>+60</span>
+                    </div>
+                </div>
+                
+                <!-- 2#探头 (蓝色) -->
+                <div class="mb-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs flex items-center">
+                            <span class="led bg-blue-500 text-blue-500"></span>
+                            2# 探头 (右→中)
+                        </span>
+                        <span id="x2Pos" class="font-mono text-blue-400">300.00</span>
+                        <span class="text-xs text-gray-500">mm</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="x2Progress" class="progress-bar-fill-2" style="width: 0%"></div>
+                    </div>
+                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>-60</span>
+                        <span>0</span>
+                        <span>+300</span>
+                    </div>
+                </div>
+                
+                <!-- 旋转角度 -->
+                <div class="bg-gray-800 p-3 rounded flex justify-between items-center">
+                    <span class="text-xs text-gray-400">主轴角度 (Theta)</span>
+                    <span><span id="rotPos" class="font-mono text-yellow-400">0.0</span> °</span>
+                </div>
+            </div>
+
+            <!-- 扫描参数 -->
+            <div class="card">
+                <div class="card-title">扫描参数</div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="input-group">
+                        <label>X 步进 (mm)</label>
+                        <input type="number" id="stepX" value="10" min="1" max="50">
+                    </div>
+                    <div class="input-group">
+                        <label>最大角度 (°)</label>
+                        <input type="number" id="maxAngle" value="170" min="90" max="180">
+                    </div>
+                    <div class="input-group">
+                        <label>角度步进 (°)</label>
+                        <input type="number" id="angleStep" value="2.5" min="0.5" max="10" step="0.5">
+                    </div>
+                    <div class="input-group">
+                        <label>已采集点数</label>
+                        <div id="pointCount" class="font-mono text-xl text-purple-400 mt-1">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 控制按钮 -->
+            <div class="card">
+                <div class="card-title">测量控制</div>
+                <div class="grid grid-cols-3 gap-2">
+                    <button id="startBtn" class="btn btn-success flex flex-col items-center py-3">
+                        <span class="text-lg">▶</span>
+                        <span class="text-xs mt-1">启动</span>
+                    </button>
+                    <button id="stopBtn" class="btn btn-secondary flex flex-col items-center py-3" disabled>
+                        <span class="text-lg">⏸</span>
+                        <span class="text-xs mt-1">暂停</span>
+                    </button>
+                    <button id="resetBtn" class="btn btn-danger flex flex-col items-center py-3">
+                        <span class="text-lg">↺</span>
+                        <span class="text-xs mt-1">复位</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 断开连接 -->
+            <button id="disconnectBtn" class="btn btn-secondary w-full mt-2">断开连接</button>
+        </div>
+
+        <!-- 3D 视图 -->
+        <div id="three-container"></div>
+
+        <!-- 右侧信息面板 -->
+        <div class="sidebar-right">
+            <!-- 误差统计 -->
+            <div class="card">
+                <div class="card-title">误差统计</div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-gray-800 p-2 rounded">
+                        <div id="errorMax" class="text-red-400 font-mono text-lg font-bold">+0.000</div>
+                        <div class="text-xs text-gray-400">最大误差 (mm)</div>
+                    </div>
+                    <div class="bg-gray-800 p-2 rounded">
+                        <div id="errorMin" class="text-green-400 font-mono text-lg font-bold">0.000</div>
+                        <div class="text-xs text-gray-400">最小误差 (mm)</div>
+                    </div>
+                    <div class="bg-gray-800 p-2 rounded">
+                        <div id="errorAvg" class="text-blue-400 font-mono text-lg font-bold">0.000</div>
+                        <div class="text-xs text-gray-400">平均误差 (mm)</div>
+                    </div>
+                    <div class="bg-gray-800 p-2 rounded">
+                        <div id="errorStd" class="text-purple-400 font-mono text-lg font-bold">0.000</div>
+                        <div class="text-xs text-gray-400">标准差 (mm)</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 设备说明 -->
+            <div class="card">
+                <div class="card-title">设备结构说明</div>
+                <div class="text-xs text-gray-400 space-y-2">
+                    <p>• <span class="text-green-400">1#探头</span>：上导轨，从左(-300mm)向中(60mm)</p>
+                    <p>• <span class="text-blue-400">2#探头</span>：下导轨，从右(300mm)向中(-60mm)</p>
+                    <p>• <span class="text-yellow-400">旋转轴</span>：0-170°，双探头同步</p>
+                    <p>• <span class="text-purple-400">重叠区</span>：-60mm ~ 60mm</p>
+                </div>
+            </div>
+            
+            <!-- 扫描流程 -->
+            <div class="card">
+                <div class="card-title">扫描流程</div>
+                <div class="text-xs text-gray-400 space-y-1">
+                    <p>1. <span class="text-blue-400">APPROACH</span>：两探头归位</p>
+                    <p>2. <span class="text-green-400">SCAN</span>：旋转扫描采样</p>
+                    <p>3. <span class="text-yellow-400">STEP</span>：X轴进给</p>
+                    <p>4. 重复 2-3 至终点</p>
+                </div>
+            </div>
+
+            <!-- 误差颜色说明 -->
+            <div class="card">
+                <div class="card-title">点云颜色说明</div>
+                <div class="space-y-2 text-xs">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <span class="w-4 h-4 rounded-full mr-2" style="background: rgb(0, 255, 77);"></span>
+                            <span>优秀</span>
+                        </div>
+                        <span class="text-gray-400">≤ 0.05mm</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <span class="w-4 h-4 rounded-full mr-2" style="background: rgb(255, 230, 0);"></span>
+                            <span>注意</span>
+                        </div>
+                        <span class="text-gray-400">0.05 - 0.10mm</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <span class="w-4 h-4 rounded-full mr-2" style="background: rgb(255, 0, 0);"></span>
+                            <span>超差</span>
+                        </div>
+                        <span class="text-gray-400">&gt; 0.10mm</span>
+                    </div>
+                    <div class="mt-3 pt-2 border-t border-gray-600 text-gray-500">
+                        <p>💡 点云颜色由误差大小决定</p>
+                        <p>💡 尺寸已放大便于观察</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 视图控制 -->
+            <div class="card">
+                <div class="card-title">视图控制</div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="setView('front')" class="btn btn-secondary text-xs">前视图</button>
+                    <button onclick="setView('top')" class="btn btn-secondary text-xs">俯视图</button>
+                    <button onclick="setView('side')" class="btn btn-secondary text-xs">侧视图</button>
+                    <button onclick="setView('iso')" class="btn btn-secondary text-xs">等轴视图</button>
+                </div>
+            </div>
+
+            <!-- 机械参数 -->
+            <div class="card">
+                <div class="card-title">机械参数</div>
+                <div class="text-xs text-gray-400 space-y-1 font-mono">
+                    <p>模具半径: 200 mm</p>
+                    <p>1# 行程: -300 → +60 mm</p>
+                    <p>2# 行程: +300 → -60 mm</p>
+                    <p>旋转范围: 0 → 170°</p>
+                    <p>重叠区域: -60 ~ +60 mm</p>
+                </div>
+            </div>
+
+            <!-- 测量数据表 -->
+            <div class="card">
+                <div class="card-title">测量数据 (最新100条)</div>
+                <div class="data-table-container">
+                    <table id="dataTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 50px;">探头</th>
+                                <th style="width: 60px;">X (mm)</th>
+                                <th style="width: 60px;">Y (mm)</th>
+                                <th style="width: 60px;">Z (mm)</th>
+                                <th style="width: 70px;">误差 (mm)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataTableBody">
+                            <tr>
+                                <td colspan="5" style="color: #64748b; padding: 20px;">等待扫描数据...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

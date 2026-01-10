@@ -24,7 +24,7 @@ class HardwareSimulator(QThread):
     measurement_error = Signal(str)  # 错误信号
     progress_updated = Signal(int, int)  # 进度更新 (当前点, 总点数)
     
-    def __init__(self, theoretical_data, measurement_params, output_file_path="live_measurement.csv"):
+    def __init__(self, theoretical_data, measurement_params, output_file_path="live_measurement.csv", mode='simulation'):
         """
         初始化硬件模拟器
         
@@ -36,12 +36,14 @@ class HardwareSimulator(QThread):
                     'rot_step': float, 'measurement_delay': float
                 }
             output_file_path: str，输出文件路径
+            mode: str, 'simulation' (纯软件模拟) 或 'real' (连接 PLC 仿真/实物)
         """
         super().__init__()
         
         self.theoretical_data = theoretical_data
         self.measurement_params = measurement_params
         self.output_file_path = output_file_path
+        self.mode = mode
         self.is_running = False
         self.is_paused = False
         
@@ -50,7 +52,16 @@ class HardwareSimulator(QThread):
         self.systematic_error = 0.02  # 系统性误差 (固定偏移)
         self.random_noise_level = 0.05  # 随机噪声级别
         
-        print(f"HardwareSimulator初始化完成，理论数据点数: {len(theoretical_data)}")
+        self.plc = None
+        if self.mode == 'real':
+            try:
+                from hardware_driver import PLCDriver
+                self.plc = PLCDriver(ip='127.0.0.1') # 默认连接本地仿真
+            except ImportError:
+                print("无法导入 PLCDriver，回退到模拟模式")
+                self.mode = 'simulation'
+        
+        print(f"HardwareSimulator初始化完成，模式: {self.mode}，理论数据点数: {len(theoretical_data)}")
         
     def run(self):
         """主运行函数 - 在独立线程中执行"""
@@ -66,6 +77,15 @@ class HardwareSimulator(QThread):
     def simulate_measurement_process(self):
         """模拟整个测量过程"""
         print("开始硬件模拟测量过程...")
+        
+        if self.mode == 'real' and self.plc:
+            if not self.plc.connect():
+                print("PLC 连接失败，无法开始测量")
+                self.measurement_error.emit("PLC 连接失败")
+                return
+            print("PLC 已连接，正在初始化...")
+            self.plc.initialize_machine()
+            time.sleep(1)
         
         # 清空或创建输出文件
         self.initialize_output_file()
@@ -105,6 +125,21 @@ class HardwareSimulator(QThread):
             angle_rad = math.atan2(z_ideal, y_ideal)
             angle_deg = math.degrees(angle_rad)
             
+            if self.mode == 'real' and self.plc:
+                # 发送运动指令
+                # 假设使用 1# X轴 (Top)
+                self.plc.move_axis(1, x_pos)
+                self.plc.move_axis(3, angle_deg)
+                
+                # 等待运动完成
+                timeout = 100 # 10秒超时
+                while self.is_running and timeout > 0:
+                    status = self.plc.get_machine_status()
+                    if not status['x1_moving'] and not status['rotation_moving']:
+                        break
+                    time.sleep(0.1)
+                    timeout -= 1
+            
             # 模拟测量误差
             measured_radius = self.simulate_measurement_error(ideal_radius, sequence)
             
@@ -115,11 +150,16 @@ class HardwareSimulator(QThread):
             self.measurement_point.emit(sequence, x_pos, angle_deg, measured_radius)
             self.progress_updated.emit(sequence, total_points)
             
-            # 模拟测量延时
-            measurement_delay = self.measurement_params.get('measurement_delay', 0.05)
-            time.sleep(measurement_delay)
+            # 模拟测量延时 (仅在模拟模式下需要，真实模式下运动本身就有延时)
+            if self.mode == 'simulation':
+                measurement_delay = self.measurement_params.get('measurement_delay', 0.05)
+                time.sleep(measurement_delay)
             
         print("硬件模拟测量过程完成")
+        if self.mode == 'real' and self.plc:
+            self.plc.stop_all()
+            self.plc.disconnect()
+            
         self.measurement_finished.emit()
         
     def filter_measurement_points(self):

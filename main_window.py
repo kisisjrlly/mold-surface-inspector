@@ -23,8 +23,7 @@ from PySide6.QtGui import QAction, QIcon, QFont, QPalette, QColor
 from config import AppConfig
 from styles import StyleManager
 from hardware_simulator import HardwareSimulator
-from analysis_worker import AnalysisWorker
-from hardware_simulator import HardwareSimulator
+from data_collector import DataCollector
 from analysis_worker import AnalysisWorker
 
 
@@ -1118,11 +1117,10 @@ class MainWindow(QMainWindow):
         os.makedirs(output_dir, exist_ok=True)
         measurement_file = os.path.join(output_dir, "live_measurement.csv")
         
-        # 创建硬件模拟器
-        self.hardware_simulator = HardwareSimulator(
-            theoretical_data=self.theoretical_data,
-            measurement_params=measurement_params,
-            output_file_path=measurement_file
+        # 创建硬件模拟器 (使用新的 DataCollector)
+        self.hardware_simulator = DataCollector(
+            plc_ip='127.0.0.1',
+            data_file=measurement_file
         )
         
         # 创建误差分析工作线程
@@ -1135,10 +1133,10 @@ class MainWindow(QMainWindow):
         )
         
         # 连接硬件模拟器信号
-        self.hardware_simulator.measurement_point.connect(self.on_measurement_point)
-        self.hardware_simulator.measurement_finished.connect(self.on_measurement_finished)
-        self.hardware_simulator.measurement_error.connect(self.on_measurement_error)
-        self.hardware_simulator.progress_updated.connect(self.on_progress_updated)
+        self.hardware_simulator.position_update.connect(self.on_position_update)
+        self.hardware_simulator.finished.connect(self.on_measurement_finished)
+        self.hardware_simulator.error_occurred.connect(self.on_measurement_error)
+        self.hardware_simulator.progress_update.connect(self.on_progress_updated)
         
         # 连接误差分析工作线程信号
         self.analysis_worker.analysis_result.connect(self.on_analysis_result)
@@ -1148,7 +1146,11 @@ class MainWindow(QMainWindow):
         self.analysis_worker.analysis_error.connect(self.on_analysis_error)
         
         # 启动线程
-        self.hardware_simulator.start()
+        self.hardware_simulator.start_scan(
+            measurement_params['x_min'],
+            measurement_params['x_max'],
+            measurement_params['x_step']
+        )
         self.analysis_worker.start()
         
         # 更新UI状态
@@ -1253,6 +1255,14 @@ class MainWindow(QMainWindow):
         self.tolerance_over_limit_input.setEnabled(False)
         
     # 新增：信号槽函数
+    def on_position_update(self, x_pos, angle_deg):
+        """处理PLC位置更新信号"""
+        # 更新实时状态
+        self.current_x = x_pos
+        self.current_angle = angle_deg
+        self.current_x_label.setText(f"{x_pos:.1f} mm")
+        self.current_angle_label.setText(f"{angle_deg:.1f}°")
+
     def on_measurement_point(self, sequence, x_pos, angle_deg, measured_radius):
         """处理硬件模拟器的测量点信号"""
         print(f"收到测量点: 序号={sequence}, X={x_pos}, 角度={angle_deg}, 半径={measured_radius}")

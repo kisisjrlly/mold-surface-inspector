@@ -1,18 +1,18 @@
 #!/bin/bash
 
 # 模具曲面精度分析系统 - 运行脚本
-# 专为 conda pyside-env 环境设计
+# 专为 conda inspector 环境设计
 
 echo "=========================================="
 echo "模具曲面精度分析系统"
 echo "=========================================="
 
 # 激活 conda 环境
-echo "激活 pyside-env 环境..."
-source activate pyside-env
+echo "激活 inspector 环境..."
+source activate inspector
 
 # 检查是否成功激活
-if [[ "$CONDA_DEFAULT_ENV" == "pyside-env" ]]; then
+if [[ "$CONDA_DEFAULT_ENV" == "inspector" ]]; then
     echo "环境激活成功: $CONDA_DEFAULT_ENV"
 else
     echo "警告: 环境可能未正确激活"

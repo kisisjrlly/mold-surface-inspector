@@ -1,0 +1,15 @@
+{
+  "name": "mold-surface-inspector",
+  "version": "1.0.0",
+  "description": "模具曲面精度分析系统 - Electron + Three.js 版本",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0"
+  }
+}

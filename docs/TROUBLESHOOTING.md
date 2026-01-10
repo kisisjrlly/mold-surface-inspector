@@ -29,9 +29,9 @@ conda update conda
 conda config --add channels conda-forge
 
 # 重新创建环境
-conda env remove -n pyside-env
-conda create -n pyside-env python=3.11 -y
-conda activate pyside-env
+conda env remove -n inspector
+conda create -n inspector python=3.11 -y
+conda activate inspector
 pip install -r requirements.txt
 ```
 

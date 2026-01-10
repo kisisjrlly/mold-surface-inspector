@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模具检测设备 - V4.1 重叠区域测量版</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1e1e1e; font-family: 'Segoe UI', Roboto, sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; display: block; }
+        .panel { background: rgba(30, 30, 30, 0.9); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5); }
+        .status-value { font-family: 'Consolas', 'Monaco', monospace; color: #60a5fa; }
+        .led { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; box-shadow: 0 0 5px currentColor;}
+    </style>
+</head>
+<body>
+
+    <!-- 悬浮控制面板 -->
+    <div class="absolute top-6 left-6 z-10 w-80 panel rounded-xl p-5 text-gray-200 transition-all hover:shadow-2xl">
+        <div class="flex items-center justify-between mb-4 border-b border-gray-600 pb-2">
+            <h1 class="text-lg font-bold text-white tracking-wide">检测设备数字孪生</h1>
+            <span class="text-xs bg-purple-600 text-white px-2 py-0.5 rounded">V4.1 重叠区域版</span>
+        </div>
+        
+        <!-- 状态监视器 -->
+        <div class="space-y-3 text-xs mb-6">
+            <div class="flex justify-between items-center bg-gray-800 p-2.5 rounded border border-gray-700">
+                <span class="text-gray-400">运行状态</span> 
+                <span id="status-text" class="text-yellow-400 font-bold flex items-center"><span class="led bg-yellow-400 text-yellow-400"></span>待机就绪</span>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-gray-800 p-2 rounded border-l-2 border-green-500">
+                    <div class="text-gray-400 mb-1">1# Top 轴 (左)</div>
+                    <div class="status-value text-green-400 text-sm" id="val-x1">0.00 mm</div>
+                </div>
+                <div class="bg-gray-800 p-2 rounded border-l-2 border-blue-500">
+                    <div class="text-gray-400 mb-1">2# Bot 轴 (右)</div>
+                    <div class="status-value text-blue-400 text-sm" id="val-x2">0.00 mm</div>
+                </div>
+            </div>
+
+            <div class="bg-gray-800 p-2 rounded flex justify-between items-center border-l-2 border-purple-500">
+                <span class="text-gray-400">主轴角度 (Theta)</span>
+                <span id="val-angle" class="status-value text-purple-400">0.0 °</span>
+            </div>
+            
+            <div class="flex justify-between text-gray-400 px-1">
+                 <span>已采集点数:</span> <span id="val-points" class="text-white">0</span>
+            </div>
+        </div>
+
+        <!-- 操作区 -->
+        <div class="grid grid-cols-3 gap-2">
+            <button id="btn-start" class="bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg font-semibold transition shadow flex flex-col items-center justify-center gap-1 h-16 group active:bg-blue-700">
+                <svg class="w-5 h-5 group-active:scale-90 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span>启动</span>
+            </button>
+            <button id="btn-pause" class="bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-lg font-semibold transition shadow flex flex-col items-center justify-center gap-1 h-16 active:bg-gray-800">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <span>暂停</span>
+            </button>
+            <button id="btn-reset" class="bg-red-900 hover:bg-red-800 text-white py-2 rounded-lg font-semibold transition shadow flex flex-col items-center justify-center gap-1 h-16 active:bg-red-950">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                <span>复位</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 3D 容器 -->
+    <div id="canvas-container"></div>
+
+    <script>
+        // --- 1. 场景搭建 ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x181818); 
+        scene.fog = new THREE.FogExp2(0x181818, 0.0008);
+        
+        const grid = new THREE.GridHelper(2000, 40, 0x444444, 0x222222);
+        grid.position.y = -300;
+        scene.add(grid);
+
+        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 10000);
+        camera.position.set(800, 400, 1000); 
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 1.5;
+        controls.target.set(0, 0, 0);
+
+        // 灯光
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+        const mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        mainLight.position.set(200, 500, 200);
+        mainLight.castShadow = true;
+        scene.add(mainLight);
+        const bottomLight = new THREE.PointLight(0x4455ff, 0.5);
+        bottomLight.position.set(0, -200, 0);
+        scene.add(bottomLight);
+
+        // --- 2. 材质库 ---
+        const mats = {
+            framePaint: new THREE.MeshStandardMaterial({ color: 0x505050, roughness: 0.7, metalness: 0.2 }),
+            steelShiny: new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.2, metalness: 0.9 }),
+            steelMatte: new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.6, metalness: 0.6 }),
+            railBlack: new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4, metalness: 0.1 }),
+            anodizedBlack: new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5, metalness: 0.5 }),
+            probeBody: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2, metalness: 0.1 }),
+            indicatorTip: new THREE.MeshStandardMaterial({ color: 0xff3333, emissive: 0xaa0000, emissiveIntensity: 0.2 }),
+            moldSurface: new THREE.MeshStandardMaterial({ 
+                color: 0xcccccc, metalness: 0.3, roughness: 0.2, opacity: 0.5, transparent: true, side: THREE.DoubleSide, depthWrite: false
+            }),
+            probe1Color: new THREE.MeshStandardMaterial({ color: 0x4ade80 }), // 绿色
+            probe2Color: new THREE.MeshStandardMaterial({ color: 0x60a5fa })  // 蓝色
+        };
+
+        // --- 3. 设备建模 ---
+        const machine = new THREE.Group();
+        scene.add(machine);
+
+        // 3.1 机架 (Frame)
+        const createFrame = () => {
+            const group = new THREE.Group();
+            const w = 750, h = 450;
+            const beamGeo = new THREE.BoxGeometry(40, 40, h);
+            const crossGeo = new THREE.BoxGeometry(w + 80, 40, 40);
+            const lPost1 = new THREE.Mesh(beamGeo, mats.framePaint); lPost1.position.set(-w/2, -h/2 + 20, 0);
+            const lPost2 = new THREE.Mesh(beamGeo, mats.framePaint); lPost2.position.set(-w/2, h/2 - 20, 0);
+            const lPlate = new THREE.Mesh(new THREE.BoxGeometry(40, h, 200), mats.framePaint); lPlate.position.set(-w/2, 0, 0);
+            const rPlate = new THREE.Mesh(new THREE.BoxGeometry(40, h, 40), mats.framePaint); rPlate.position.set(w/2, 0, 0);
+            // 移除顶梁，保留底梁
+            const botBeam = new THREE.Mesh(crossGeo, mats.framePaint); botBeam.position.set(0, -h/2, 0);
+            group.add(lPlate, rPlate, botBeam);
+            return group;
+        };
+        machine.add(createFrame());
+
+        // 3.2 旋转总成
+        const rotatingPart = new THREE.Group();
+        machine.add(rotatingPart);
+
+        const mainShaft = new THREE.Mesh(new THREE.CylinderGeometry(35, 35, 600, 32), mats.steelShiny);
+        mainShaft.rotation.z = Math.PI / 2; rotatingPart.add(mainShaft);
+        const leftShaft = new THREE.Mesh(new THREE.CylinderGeometry(25, 25, 100, 32), mats.steelShiny);
+        leftShaft.rotation.z = Math.PI / 2; leftShaft.position.x = -350; rotatingPart.add(leftShaft);
+        const rightShaft = new THREE.Mesh(new THREE.CylinderGeometry(25, 25, 150, 32), mats.steelShiny);
+        rightShaft.rotation.z = Math.PI / 2; rightShaft.position.x = 375; rotatingPart.add(rightShaft);
+
+        const bearingL = new THREE.Mesh(new THREE.BoxGeometry(50, 80, 80), mats.steelMatte); bearingL.position.x = -375; machine.add(bearingL);
+        const bearingR = new THREE.Mesh(new THREE.BoxGeometry(50, 80, 80), mats.steelMatte); bearingR.position.x = 375; machine.add(bearingR);
+        const motorCoupling = new THREE.Mesh(new THREE.CylinderGeometry(30, 30, 60, 32), mats.framePaint);
+        motorCoupling.rotation.z = Math.PI / 2; motorCoupling.position.x = 430; machine.add(motorCoupling);
+        const servoMotor = new THREE.Mesh(new THREE.BoxGeometry(80, 80, 120), mats.anodizedBlack);
+        servoMotor.position.x = 520; machine.add(servoMotor);
+
+        // 3.3 导轨 (上Top 和 下Bot)
+        const railLength = 700; // 增加导轨长度到 700mm 以适应重叠行程
+        const railOffset = 35; 
+        // 上导轨 (Top)
+        const topMount = new THREE.Mesh(new THREE.BoxGeometry(railLength, 10, 50), mats.steelMatte); topMount.position.y = railOffset + 5; rotatingPart.add(topMount);
+        const topRail = new THREE.Mesh(new THREE.BoxGeometry(railLength, 5, 20), mats.railBlack); topRail.position.y = railOffset + 12.5; rotatingPart.add(topRail);
+        // 下导轨 (Bottom)
+        const botMount = new THREE.Mesh(new THREE.BoxGeometry(railLength, 10, 50), mats.steelMatte); botMount.position.y = -(railOffset + 5); rotatingPart.add(botMount);
+        const botRail = new THREE.Mesh(new THREE.BoxGeometry(railLength, 5, 20), mats.railBlack); botRail.position.y = -(railOffset + 12.5); rotatingPart.add(botRail);
+
+        // 3.4 滑块与探头工厂 (支持上下方向配置)
+        function createProbeAssembly(colorMat, isTop) {
+            const group = new THREE.Group();
+            // 关键：1#探头朝上(sign=1), 2#探头朝下(sign=-1)
+            const sign = isTop ? 1 : -1;
+            
+            const block = new THREE.Mesh(new THREE.BoxGeometry(60, 15, 40), colorMat); 
+            group.add(block);
+            const holder = new THREE.Mesh(new THREE.BoxGeometry(20, 40, 20), mats.steelMatte); holder.position.y = sign * 20; group.add(holder);
+            const dialBody = new THREE.Mesh(new THREE.CylinderGeometry(15, 15, 10, 32), mats.probeBody); dialBody.rotation.x = Math.PI / 2; dialBody.position.y = sign * 40; dialBody.position.z = 10; group.add(dialBody);
+            const stem = new THREE.Mesh(new THREE.CylinderGeometry(3, 3, 40, 16), mats.steelShiny); stem.position.y = sign * 50; stem.position.z = 10; group.add(stem);
+            const tip = new THREE.Mesh(new THREE.SphereGeometry(3), mats.indicatorTip); tip.position.y = sign * 70; tip.position.z = 10; group.add(tip);
+            return group;
+        }
+
+        // 严格图纸复现：
+        // 1# (绿) -> 安装在上方导轨 (Top Rail), 初始朝上
+        // 2# (蓝) -> 安装在下方导轨 (Bot Rail), 初始朝下
+        const carriage1 = createProbeAssembly(mats.probe1Color, true);
+        const carriage2 = createProbeAssembly(mats.probe2Color, false);
+
+        const carriage1Container = new THREE.Group(); 
+        carriage1Container.position.y = railOffset + 20; // 放到上面
+        carriage1Container.add(carriage1);
+        
+        const carriage2Container = new THREE.Group(); 
+        carriage2Container.position.y = -(railOffset + 20); // 放到下面
+        carriage2Container.add(carriage2);
+
+        rotatingPart.add(carriage1Container);
+        rotatingPart.add(carriage2Container);
+
+        // 3.5 模具 (Mold)
+        const moldGeo = new THREE.CylinderGeometry(200, 200, 700, 64, 1, true, Math.PI * 0.15, Math.PI * 0.7); 
+        const mold = new THREE.Mesh(moldGeo, mats.moldSurface);
+        mold.rotation.z = Math.PI / 2; 
+        mold.rotation.x = Math.PI; 
+        mold.position.y = 20; 
+        scene.add(mold);
+
+        const pointsGroup = new THREE.Group();
+        scene.add(pointsGroup);
+
+        // --- 4. 逻辑控制 (大角度旋转 + 延长行程 + 重叠区域) ---
+        
+        // 1#探头 (上->左半区+中): 初始在 -300, 移动到 60 (跨过中线)
+        // 2#探头 (下->右半区+中): 初始在 300, 移动到 -60 (跨过中线)
+        const X_START_1 = -300, X_END_1 = 60; 
+        const X_START_2 = 300, X_END_2 = -60;   
+        const SCAN_STEP_X = 10;                
+        const MAX_ANGLE = 170; 
+
+        let state = {
+            running: false,
+            phase: 'IDLE',
+            x1: 0, x2: 0,
+            targetX1: X_START_1, targetX2: X_START_2,
+            angle: 0,
+            targetAngle: 0,
+            scanDir: 1,
+            points: 0
+        };
+
+        carriage1Container.position.x = state.x1;
+        carriage2Container.position.x = state.x2;
+
+        function spawnPoint(x, angle, isTopProbe) {
+            const rBase = 200; 
+            const rad = THREE.Math.degToRad(angle);
+            const offset = isTopProbe ? 0 : Math.PI; 
+            const effAngle = rad + offset; 
+
+            const tipY = Math.sin(effAngle + Math.PI/2) * rBase; 
+            const tipZ = Math.cos(effAngle + Math.PI/2) * rBase;
+
+            if (tipY < -50) { 
+                const dot = new THREE.Mesh(new THREE.SphereGeometry(1.5), new THREE.MeshBasicMaterial({ 
+                    color: isTopProbe ? 0x4ade80 : 0x60a5fa 
+                }));
+                
+                const cos = Math.cos(rad);
+                const sin = Math.sin(rad);
+                const sign = isTopProbe ? 1 : -1;
+                
+                const finalY = sign * rBase * cos;
+                const finalZ = sign * rBase * sin;
+
+                dot.position.set(x, finalY, finalZ); 
+                pointsGroup.add(dot);
+                state.points++;
+                document.getElementById('val-points').innerText = state.points;
+            }
+        }
+
+        function moveTowards(current, target, speed) {
+            if (Math.abs(target - current) <= speed) return target;
+            return current + Math.sign(target - current) * speed;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+
+            if (state.running) {
+                // 1. 初始定位 (APPROACH)
+                if (state.phase === 'APPROACH') {
+                    const speed = 5.0; 
+                    const nextX1 = moveTowards(state.x1, state.targetX1, speed);
+                    const nextX2 = moveTowards(state.x2, state.targetX2, speed);
+                    
+                    let isMoving = false;
+                    if (state.x1 !== nextX1) { state.x1 = nextX1; isMoving = true; }
+                    if (state.x2 !== nextX2) { state.x2 = nextX2; isMoving = true; }
+
+                    if (isMoving) {
+                         document.getElementById('status-text').innerHTML = '<span class="led bg-blue-500 text-blue-500"></span>X轴归位中...';
+                    } else {
+                        state.phase = 'SCAN';
+                    }
+                    carriage1Container.position.x = state.x1;
+                    carriage2Container.position.x = state.x2;
+                }
+
+                // 2. 大角度扫描 (SCAN)
+                else if (state.phase === 'SCAN') {
+                    document.getElementById('status-text').innerHTML = '<span class="led bg-green-500 text-green-500"></span>翻转扫描中...';
+                    // 加快扫描速度
+                    const step = 2.5 * state.scanDir;
+                    state.angle += step;
+                    
+                    spawnPoint(state.x1, state.angle, true);  // Top Probe
+                    spawnPoint(state.x2, state.angle, false); // Bot Probe
+
+                    if (Math.abs(state.angle) >= MAX_ANGLE) {
+                        state.angle = MAX_ANGLE * state.scanDir; 
+                        
+                        // 计算下一步目标 (往中间重叠区走)
+                        const nextX1 = state.x1 + SCAN_STEP_X;
+                        const nextX2 = state.x2 - SCAN_STEP_X;
+
+                        // 结束条件 (两个都超过各自的重叠终点)
+                        // 1# 向右移动 (> 60), 2# 向左移动 (< -60)
+                        if (nextX1 > X_END_1 || nextX2 < X_END_2) {
+                            state.running = false;
+                            document.getElementById('status-text').innerHTML = '<span class="led bg-green-500 text-green-500"></span>检测完成';
+                        } else {
+                            state.targetX1 = nextX1;
+                            state.targetX2 = nextX2;
+                            state.phase = 'STEP'; 
+                        }
+                        state.scanDir *= -1;  
+                    } 
+                    rotatingPart.rotation.x = THREE.Math.degToRad(state.angle);
+                }
+
+                // 3. 进给 (STEP)
+                else if (state.phase === 'STEP') {
+                    document.getElementById('status-text').innerHTML = '<span class="led bg-blue-400 text-blue-400"></span>X轴进给...';
+                    const speed = 1.0;
+                    const nextX1 = moveTowards(state.x1, state.targetX1, speed);
+                    const nextX2 = moveTowards(state.x2, state.targetX2, speed);
+                    
+                    let isMoving = false;
+                    if (state.x1 !== nextX1) { state.x1 = nextX1; isMoving = true; }
+                    if (state.x2 !== nextX2) { state.x2 = nextX2; isMoving = true; }
+
+                    if (!isMoving) {
+                        state.phase = 'SCAN'; 
+                    }
+                    carriage1Container.position.x = state.x1;
+                    carriage2Container.position.x = state.x2;
+                }
+            }
+
+            document.getElementById('val-x1').innerText = state.x1.toFixed(2) + ' mm';
+            document.getElementById('val-x2').innerText = state.x2.toFixed(2) + ' mm';
+            document.getElementById('val-angle').innerText = state.angle.toFixed(1) + ' °';
+            
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        document.getElementById('btn-start').onclick = () => {
+             if (state.running) return;
+             // 简单判据
+             if (state.x1 >= X_END_1 && state.x1 !== 0) return; 
+             
+             if (state.phase === 'IDLE' && state.x1 === 0) {
+                 state.targetX1 = X_START_1; state.targetX2 = X_START_2;
+                 state.phase = 'APPROACH';
+             } else if (state.phase === 'IDLE') {
+                 state.phase = 'SCAN';
+             }
+             state.running = true;
+             document.getElementById('status-text').innerHTML = '<span class="led bg-blue-500 text-blue-500"></span>启动中...';
+        };
+        document.getElementById('btn-pause').onclick = () => state.running = false;
+        document.getElementById('btn-reset').onclick = () => {
+            state.running = false;
+            state.phase = 'IDLE';
+            state.x1 = 0; state.x2 = 0; 
+            state.targetX1 = X_START_1; state.targetX2 = X_START_2;
+            state.angle = 0; state.points = 0; state.scanDir = 1;
+            rotatingPart.rotation.x = 0;
+            carriage1Container.position.x = state.x1;
+            carriage2Container.position.x = state.x2;
+            while(pointsGroup.children.length > 0) pointsGroup.remove(pointsGroup.children[0]);
+            document.getElementById('status-text').innerHTML = '<span class="led bg-yellow-400 text-yellow-400"></span>待机就绪';
+            document.getElementById('val-points').innerText = "0";
+        };
+
+        animate();
+    </script>
+</body>
+</html>

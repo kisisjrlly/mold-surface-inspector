@@ -36,10 +36,10 @@
 
 ```bash
 # 创建专用环境
-conda create -n pyside-env python=3.9
+conda create -n inspector python=3.9
 
 # 激活环境
-conda activate pyside-env
+conda activate inspector
 
 # 安装依赖
 pip install -r requirements.txt
@@ -50,12 +50,12 @@ pip install -r requirements.txt
 
 - Python 3.8+
 - conda 环境管理器
-- 已创建的 pyside-env 环境，包含 PySide6
+- 已创建的 inspector 环境，包含 PySide6
 
 ### 1. 激活 conda 环境
 
 ```bash
-conda activate pyside-env
+conda activate inspector
 ```
 
 ### 2. 安装依赖（如果需要）

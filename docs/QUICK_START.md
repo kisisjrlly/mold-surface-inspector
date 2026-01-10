@@ -9,18 +9,18 @@
 ### 环境检查
 ```bash
 # 检查conda环境
-conda env list | grep pyside-env
+conda env list | grep inspector
 
 # 如果环境不存在
-conda create -n pyside-env python=3.9
-conda activate pyside-env
+conda create -n inspector python=3.9
+conda activate inspector
 pip install -r requirements.txt
 ```
 
 ### 启动应用
 ```bash
 cd /path/to/mold-surface-inspector
-conda activate pyside-env
+conda activate inspector
 
 # 方式1: 使用启动脚本
 ./launch.sh
@@ -380,7 +380,7 @@ def handle_user_input(self):
 ### 问题3: 找不到模块
 ```bash
 # 解决方案
-conda activate pyside-env
+conda activate inspector
 pip install 缺失的模块名
 ```
 

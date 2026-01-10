@@ -41,25 +41,25 @@
 ### 环境准备
 1. **安装 conda 环境**
    ```bash
-   # 检查是否已有 pyside-env 环境
+   # 检查是否已有 inspector 环境
    conda env list
    
    # 如果没有，创建新环境
-   conda create -n pyside-env python=3.9
-   conda activate pyside-env
+   conda create -n inspector python=3.9
+   conda activate inspector
    conda install pip
    ```
 
 2. **安装 PySide6**
    ```bash
-   conda activate pyside-env
+   conda activate inspector
    pip install PySide6>=6.6.0
    ```
 
 ### 项目运行
 ```bash
 # 1. 激活环境
-conda activate pyside-env
+conda activate inspector
 
 # 2. 进入项目目录
 cd /path/to/mold-surface-inspector
@@ -577,7 +577,7 @@ def long_running_task(self):
 **Q1: 提示 PySide6 模块找不到**
 ```bash
 # 解决方案
-conda activate pyside-env
+conda activate inspector
 pip install PySide6
 ```
 

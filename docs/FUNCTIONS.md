@@ -200,7 +200,7 @@
 
 ## 🎮 使用方法
 
-1. **启动应用**: `conda activate pyside-env && python app.py`
+1. **启动应用**: `conda activate inspector && python app.py`
 2. **加载模型**: 点击加载按钮选择 CAD 文件
 3. **设置参数**: 在左侧面板调整测量参数
 4. **开始测量**: 点击开始按钮观察实时数据生成

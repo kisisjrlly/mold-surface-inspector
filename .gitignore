@@ -1,0 +1,35 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Node.js dependencies
+node_modules/
+package-lock.json
+
+# Generated and large data files
+data/
+*.csv
+*.pyc
+
+# IDE and OS files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Excel temporary files
+~$*.xlsx
+
+# Environment files
+.env
+.env.local
+venv/
+env/

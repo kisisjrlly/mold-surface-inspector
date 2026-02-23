@@ -84,6 +84,13 @@
         .btn-danger:disabled { background: #475569; cursor: not-allowed; }
         .btn-secondary { background: #475569; color: white; }
         .btn-secondary:hover { background: #64748b; }
+        .btn-secondary:active { background: #1e293b; transform: scale(0.95); }
+        .jog-btn { user-select: none; touch-action: none; cursor: pointer; }
+        .jog-btn:active { 
+            background: #1e40af !important; 
+            transform: scale(0.98); 
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+        }
         .input-group {
             margin-bottom: 10px;
         }
@@ -127,9 +134,14 @@
         .status-connected { background: #10b981; box-shadow: 0 0 8px #10b981; }
         .status-disconnected { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
         .status-scanning { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; animation: pulse 1s infinite; }
+        .status-complete { background: #3b82f6; box-shadow: 0 0 12px #3b82f6; animation: complete-pulse 2s infinite; }
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
+        }
+        @keyframes complete-pulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 12px #3b82f6; }
+            50% { transform: scale(1.2); box-shadow: 0 0 20px #3b82f6; }
         }
         .probe-color-1 { color: #4ade80; }  /* 绿色 - 1#探头 */
         .probe-color-2 { color: #60a5fa; }  /* 蓝色 - 2#探头 */
@@ -282,6 +294,10 @@
                 <div class="input-group">
                     <label>PLC IP 地址</label>
                     <input id="plcIpInput" type="text" value="127.0.0.1" placeholder="例如: 192.168.1.100">
+                    <div id="ipHistoryContainer" class="mt-2 hidden">
+                        <p class="text-xs text-gray-400 mb-1">📌 最近使用：</p>
+                        <div id="ipHistoryButtons" class="flex gap-2"></div>
+                    </div>
                     <p class="text-xs text-gray-500 mt-1">💡 仿真模式使用 127.0.0.1，真实 PLC 填写实际 IP</p>
                 </div>
                 
@@ -338,16 +354,16 @@
                             <span class="led bg-green-500 text-green-500"></span>
                             1# 探头 (左→中)
                         </span>
-                        <span id="x1Pos" class="font-mono text-green-400">-300.00</span>
+                        <span id="x1Pos" class="font-mono text-green-400">-700.00</span>
                         <span class="text-xs text-gray-500">mm</span>
                     </div>
                     <div class="progress-bar">
                         <div id="x1Progress" class="progress-bar-fill-1" style="width: 0%"></div>
                     </div>
                     <div class="flex justify-between text-xs text-gray-500 mt-1">
-                        <span>-300</span>
+                        <span>-700</span>
                         <span>0</span>
-                        <span>+60</span>
+                        <span>+100</span>
                     </div>
                 </div>
                 
@@ -358,16 +374,16 @@
                             <span class="led bg-blue-500 text-blue-500"></span>
                             2# 探头 (右→中)
                         </span>
-                        <span id="x2Pos" class="font-mono text-blue-400">300.00</span>
+                        <span id="x2Pos" class="font-mono text-blue-400">700.00</span>
                         <span class="text-xs text-gray-500">mm</span>
                     </div>
                     <div class="progress-bar">
                         <div id="x2Progress" class="progress-bar-fill-2" style="width: 0%"></div>
                     </div>
                     <div class="flex justify-between text-xs text-gray-500 mt-1">
-                        <span>-60</span>
+                        <span>-100</span>
                         <span>0</span>
-                        <span>+300</span>
+                        <span>+700</span>
                     </div>
                 </div>
                 
@@ -378,26 +394,164 @@
                 </div>
             </div>
 
+            <!-- 千分表实时测量 -->
+            <div class="card">
+                <div class="card-title">📏 千分表测量</div>
+                
+                <!-- 1#千分表 -->
+                <div class="mb-3 pb-3 border-b border-gray-700">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs flex items-center">
+                            <span class="led bg-green-500 text-green-500"></span>
+                            1# 千分表
+                        </span>
+                    </div>
+                    <div class="bg-gray-800 p-3 rounded flex justify-between items-center">
+                        <span class="text-xs text-gray-400">测量值</span>
+                        <span><span id="probe1Value" class="font-mono text-2xl font-bold text-green-400">0.00</span> <span class="text-sm text-gray-500">mm</span></span>
+                    </div>
+                </div>
+                
+                <!-- 2#千分表 -->
+                <div class="mb-2">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs flex items-center">
+                            <span class="led bg-blue-500 text-blue-500"></span>
+                            2# 千分表
+                        </span>
+                    </div>
+                    <div class="bg-gray-800 p-3 rounded flex justify-between items-center">
+                        <span class="text-xs text-gray-400">测量值</span>
+                        <span><span id="probe2Value" class="font-mono text-2xl font-bold text-blue-400">0.00</span> <span class="text-sm text-gray-500">mm</span></span>
+                    </div>
+                </div>
+            </div>
+
             <!-- 扫描参数 -->
             <div class="card">
                 <div class="card-title">扫描参数</div>
                 <div class="grid grid-cols-2 gap-3">
                     <div class="input-group">
                         <label>X 步进 (mm)</label>
-                        <input type="number" id="stepX" value="10" min="1" max="50">
+                        <input type="number" id="stepX" value="20" min="5" max="100">
                     </div>
                     <div class="input-group">
                         <label>最大角度 (°)</label>
-                        <input type="number" id="maxAngle" value="170" min="90" max="180">
+                        <input type="number" id="maxAngle" value="180" min="90" max="180">
                     </div>
                     <div class="input-group">
                         <label>角度步进 (°)</label>
-                        <input type="number" id="angleStep" value="2.5" min="0.5" max="10" step="0.5">
+                        <input type="number" id="angleStep" value="5" min="1" max="15" step="1">
                     </div>
                     <div class="input-group">
                         <label>已采集点数</label>
                         <div id="pointCount" class="font-mono text-xl text-purple-400 mt-1">0</div>
                     </div>
+                </div>
+            </div>
+
+            <!-- 手动操作 -->
+            <div class="card">
+                <div class="card-title">⚙️ 手动操作</div>
+                
+                <!-- 1#X轴 -->
+                <div class="mb-3 pb-3 border-b border-gray-700">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs text-green-400 font-semibold">1# X轴</span>
+                        <span class="text-xs text-gray-400">当前: <span id="x1ManualPos" class="text-green-400">-700.00</span> mm</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 mb-2">
+                        <div class="input-group mb-0">
+                            <label class="text-xs">点动速度</label>
+                            <input type="number" id="x1JogSpeed" value="20" min="1" max="100" class="text-xs">
+                        </div>
+                        <div class="input-group mb-0">
+                            <label class="text-xs">动作速度</label>
+                            <input type="number" id="x1ActionSpeed" value="40" min="1" max="200" class="text-xs">
+                        </div>
+                        <div class="input-group mb-0">
+                            <label class="text-xs">位置</label>
+                            <input type="number" id="x1TargetPos" value="0" step="10" class="text-xs">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-4 gap-1">
+                        <button class="btn btn-secondary text-xs py-1 jog-btn" data-axis="1" data-dir="forward">前进▶</button>
+                        <button class="btn btn-secondary text-xs py-1 jog-btn" data-axis="1" data-dir="backward">◀后退</button>
+                        <button class="btn btn-primary text-xs py-1" onclick="homeAxis(1)">回原点</button>
+                        <button class="btn btn-success text-xs py-1" onclick="moveToPosition(1)">定位</button>
+                    </div>
+                </div>
+
+                <!-- 2#X轴 -->
+                <div class="mb-3 pb-3 border-b border-gray-700">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs text-blue-400 font-semibold">2# X轴</span>
+                        <span class="text-xs text-gray-400">当前: <span id="x2ManualPos" class="text-blue-400">700.00</span> mm</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 mb-2">
+                        <div class="input-group mb-0">
+                            <label class="text-xs">点动速度</label>
+                            <input type="number" id="x2JogSpeed" value="20" min="1" max="100" class="text-xs">
+                        </div>
+                        <div class="input-group mb-0">
+                            <label class="text-xs">动作速度</label>
+                            <input type="number" id="x2ActionSpeed" value="40" min="1" max="200" class="text-xs">
+                        </div>
+                        <div class="input-group mb-0">
+                            <label class="text-xs">位置</label>
+                            <input type="number" id="x2TargetPos" value="0" step="10" class="text-xs">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-4 gap-1">
+                        <button class="btn btn-secondary text-xs py-1 jog-btn" data-axis="2" data-dir="forward">前进▶</button>
+                        <button class="btn btn-secondary text-xs py-1 jog-btn" data-axis="2" data-dir="backward">◀后退</button>
+                        <button class="btn btn-primary text-xs py-1" onclick="homeAxis(2)">回原点</button>
+                        <button class="btn btn-success text-xs py-1" onclick="moveToPosition(2)">定位</button>
+                    </div>
+                </div>
+
+                <!-- 旋转轴 -->
+                <div class="mb-2">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs text-yellow-400 font-semibold">旋转轴</span>
+                        <span class="text-xs text-gray-400">当前: <span id="rotManualPos" class="text-yellow-400">0.0</span> °</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 mb-2">
+                        <div class="input-group mb-0">
+                            <label class="text-xs">点动速度</label>
+                            <input type="number" id="rotJogSpeed" value="5" min="1" max="20" class="text-xs">
+                        </div>
+                        <div class="input-group mb-0">
+                            <label class="text-xs">动作速度</label>
+                            <input type="number" id="rotActionSpeed" value="10" min="1" max="50" class="text-xs">
+                        </div>
+                        <div class="input-group mb-0">
+                            <label class="text-xs">角度</label>
+                            <input type="number" id="rotTargetPos" value="0" step="5" min="-180" max="180" class="text-xs">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-4 gap-1">
+                        <button class="btn btn-secondary text-xs py-1 jog-btn" data-axis="3" data-dir="forward">正转↻</button>
+                        <button class="btn btn-secondary text-xs py-1 jog-btn" data-axis="3" data-dir="backward">↺反转</button>
+                        <button class="btn btn-primary text-xs py-1" onclick="homeAxis(3)">回原点</button>
+                        <button class="btn btn-success text-xs py-1" onclick="moveToPosition(3)">定位</button>
+                    </div>
+                </div>
+
+                <div class="mt-3 pt-2 border-t border-gray-700">
+                    <button class="btn btn-danger w-full text-xs py-2" onclick="initializeAll()">🏠 整机初始化</button>
+                </div>
+            </div>
+
+            <!-- 理论点云 -->
+            <div class="card">
+                <div class="card-title">理论点云数据</div>
+                <button id="loadTheoreticalBtn" class="btn btn-primary w-full mb-2">
+                    📁 加载理论点云
+                </button>
+                <div id="theoreticalStatus" class="text-xs text-gray-400">
+                    <p id="theoreticalFileName">未加载</p>
+                    <p id="theoreticalPointCount"></p>
                 </div>
             </div>
 
@@ -456,9 +610,9 @@
             <div class="card">
                 <div class="card-title">设备结构说明</div>
                 <div class="text-xs text-gray-400 space-y-2">
-                    <p>• <span class="text-green-400">1#探头</span>：上导轨，从左(-300mm)向中(60mm)</p>
-                    <p>• <span class="text-blue-400">2#探头</span>：下导轨，从右(300mm)向中(-60mm)</p>
-                    <p>• <span class="text-yellow-400">旋转轴</span>：0-170°，双探头同步</p>
+                    <p>• <span class="text-green-400">1#探头</span>：上导轨，从左(-700mm)向中(100mm)</p>
+                    <p>• <span class="text-blue-400">2#探头</span>：下导轨，从右(700mm)向中(-100mm)</p>
+                    <p>• <span class="text-yellow-400">旋转轴</span>：-180° ~ +180°，双向旋转</p>
                     <p>• <span class="text-purple-400">重叠区</span>：-60mm ~ 60mm</p>
                 </div>
             </div>
@@ -480,14 +634,21 @@
                 <div class="space-y-2 text-xs">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center">
-                            <span class="w-4 h-4 rounded-full mr-2" style="background: rgb(0, 255, 77);"></span>
+                            <span class="w-4 h-4 rounded-full mr-2" style="background: rgb(77, 179, 255);"></span>
+                            <span>理论点云</span>
+                        </div>
+                        <span class="text-gray-400">浅蓝色</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <span class="w-4 h-4 rounded-full mr-2" style="background: rgb(26, 230, 26);"></span>
                             <span>优秀</span>
                         </div>
                         <span class="text-gray-400">≤ 0.05mm</span>
                     </div>
                     <div class="flex items-center justify-between">
                         <div class="flex items-center">
-                            <span class="w-4 h-4 rounded-full mr-2" style="background: rgb(255, 230, 0);"></span>
+                            <span class="w-4 h-4 rounded-full mr-2" style="background: rgb(255, 128, 0);"></span>
                             <span>注意</span>
                         </div>
                         <span class="text-gray-400">0.05 - 0.10mm</span>
@@ -500,8 +661,8 @@
                         <span class="text-gray-400">&gt; 0.10mm</span>
                     </div>
                     <div class="mt-3 pt-2 border-t border-gray-600 text-gray-500">
-                        <p>💡 点云颜色由误差大小决定</p>
-                        <p>💡 尺寸已放大便于观察</p>
+                        <p>💡 测量点颜色由误差大小决定</p>
+                        <p>💡 理论点云为参考基准</p>
                     </div>
                 </div>
             </div>
@@ -521,11 +682,12 @@
             <div class="card">
                 <div class="card-title">机械参数</div>
                 <div class="text-xs text-gray-400 space-y-1 font-mono">
-                    <p>模具半径: 200 mm</p>
-                    <p>1# 行程: -300 → +60 mm</p>
-                    <p>2# 行程: +300 → -60 mm</p>
-                    <p>旋转范围: 0 → 170°</p>
-                    <p>重叠区域: -60 ~ +60 mm</p>
+                    <p>曲面尺寸: 1410×796×600 mm</p>
+                    <p>模具半径: ~400 mm</p>
+                    <p>1# 行程: -700 → +100 mm</p>
+                    <p>2# 行程: +700 → -100 mm</p>
+                    <p>旋转范围: -180 → +180°</p>
+                    <p>重叠区域: -100 ~ +100 mm</p>
                 </div>
             </div>
 

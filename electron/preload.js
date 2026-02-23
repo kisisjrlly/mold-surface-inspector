@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // 停止 WebSocket 服务器
     stopWSServer: () => ipcRenderer.invoke('stop-ws-server'),
     
+    // 选择理论点云文件
+    selectTheoreticalFile: () => ipcRenderer.invoke('select-theoretical-file'),
+    
     // 监听服务器停止事件
     onWSServerStopped: (callback) => ipcRenderer.on('ws-server-stopped', callback)
 });

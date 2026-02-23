@@ -69,8 +69,7 @@ class PLCDriver:
         raw_x2 = self._read_dint(2002)
         x2_mm = raw_x2 * 0.01 if raw_x2 is not None else 0.0
 
-        # 旋转轴 (假设精度 0.01度，如果协议未标明，通常与线性轴一致或为 0.1)
-        # 根据 CSV 空白备注，暂定 0.01 以防万一，如果是整数度数则后续调整
+        # 旋转轴 (精度 0.01度)
         raw_r = self._read_dint(2004)
         r_deg = raw_r * 0.01 if raw_r is not None else 0.0
         
@@ -79,6 +78,50 @@ class PLCDriver:
             'x2': x2_mm,
             'rotation': r_deg
         }
+
+    def get_probe_measurements(self):
+        """
+        获取双探头测量数据（测距数值）
+        注意：测量值可能是16位有符号整数（Int），而不是32位（DInt）
+        :return: dict {'probe1': mm, 'probe2': mm}
+        """
+        # 1#测距数值 (地址 110, 精度 0.01mm)
+        # 尝试按16位有符号整数读取
+        raw_probe1 = self._read_int16_signed(110)
+        probe1_mm = raw_probe1 * 0.01 if raw_probe1 is not None else 0.0
+
+        # 2#测距数值 (地址 112, 精度 0.01mm)
+        raw_probe2 = self._read_int16_signed(112)
+        probe2_mm = raw_probe2 * 0.01 if raw_probe2 is not None else 0.0
+        
+        return {
+            'probe1': probe1_mm,
+            'probe2': probe2_mm,
+            'raw1': raw_probe1,
+            'raw2': raw_probe2
+        }
+    
+    def _read_int16_signed(self, address):
+        """读取 16位 有符号整数 (Int)"""
+        if not self.connected: 
+            return None
+        try:
+            rr = self.client.read_holding_registers(address, count=1, device_id=self.slave_id)
+            if rr.isError(): 
+                logger.error(f"Read Int16 {address}: Modbus Error - {rr}")
+                return None
+            
+            val = rr.registers[0]
+            logger.info(f"探头地址{address}: 原始值={val} (0x{val:04X})")
+            
+            # 转换为有符号整数（16位）
+            if val >= 0x8000:  # 最高位为1，是负数
+                val -= 0x10000
+                
+            return val
+        except Exception as e:
+            logger.error(f"Read Int16 Error {address}: {e}")
+            return None
 
     def get_machine_status(self):
         """
@@ -158,20 +201,25 @@ class PLCDriver:
 
     def _read_dint(self, address):
         """读取 32位 整数 (DInt)"""
-        if not self.connected: return None
+        if not self.connected: 
+            logger.warning(f"Read DInt {address}: Not connected")
+            return None
         try:
             # 读取 2 个寄存器
             rr = self.client.read_holding_registers(address, count=2, device_id=self.slave_id)
-            if rr.isError(): return None
+            if rr.isError(): 
+                logger.error(f"Read DInt {address}: Modbus Error - {rr}")
+                return None
             
             # 手动解码: Word Order = Little (Low Reg, High Reg)
-            # 假设 PLC 是 Little Endian Word Order (CDAB)
-            # Reg0: Low Word, Reg1: High Word
             r0 = rr.registers[0]
             r1 = rr.registers[1]
             
-            # 组合成 32位 int
-            # val = (High << 16) | Low
+            # 探头地址始终输出日志（用于调试）
+            if address in [110, 112]:
+                logger.info(f"探头地址{address}: Reg0={r0}, Reg1={r1}")
+            
+            # 组合成 32位 int (Little Endian)
             val = (r1 << 16) | r0
             
             # 处理符号位 (32位有符号整数)

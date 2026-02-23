@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -139,6 +139,27 @@ ipcMain.handle('stop-ws-server', async () => {
         return { success: true, message: 'WebSocket 服务器已停止' };
     }
     return { success: false, message: '没有运行中的服务器' };
+});
+
+// IPC: 选择理论点云文件
+ipcMain.handle('select-theoretical-file', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+        title: '选择理论点云文件',
+        defaultPath: path.join(__dirname, '..', 'data'),
+        filters: [
+            { name: '点云文件', extensions: ['csv', 'py'] },
+            { name: 'CSV 文件', extensions: ['csv'] },
+            { name: 'Python 文件', extensions: ['py'] },
+            { name: '所有文件', extensions: ['*'] }
+        ],
+        properties: ['openFile']
+    });
+    
+    if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, message: '未选择文件' };
+    }
+    
+    return { success: true, filePath: result.filePaths[0] };
 });
 
 app.whenReady().then(() => {

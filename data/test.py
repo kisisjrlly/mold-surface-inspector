@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from surface_rotated import faces
+# from surface3 import faces
 
 
 def plot_surface_points():
